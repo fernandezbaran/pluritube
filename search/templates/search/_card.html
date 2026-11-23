@@ -1,0 +1,79 @@
+<div class="card" style="border-left-color: {{ item.color }};">
+    <img src="{% url 'search:thumbnail' %}?url={{ item.thumbnail|urlencode }}" alt="thumbnail" loading="lazy">
+    <div class="card-content">
+        <div>
+            <span class="source-label" style="background: {{ item.color }};">{{ item.source }}</span>
+        </div>
+        <h3><a href="{{ item.link }}" target="_blank">{{ item.title }}</a></h3>
+        {% if item.channel %}
+        <div class="card-channel">
+            {% if item.channel_link %}
+            <a class="channel-link" href="{{ item.channel_link }}" target="_blank" rel="noopener noreferrer">{{ item.channel }}</a>
+            {% else %}
+            <span class="channel-link">{{ item.channel }}</span>
+            {% endif %}
+            {% if item.channel_key and item.channel_key in subscription_keys %}
+            <button type="button" class="fav-btn fav-on" disabled>&#10003; Suscrito</button>
+            {% elif item.channel_link %}
+            <form method="post" action="{% url 'search:subscriptions' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="channel" value="{{ item.channel_link }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn">&#43; Suscribirse</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+        <p class="description">{{ item.description|truncatewords:30 }}</p>
+
+        <div class="card-actions">
+            {% if item.kind == 'playlist' %}
+            <button type="button" class="watch-btn playlist-play-btn" data-playlist="{{ item.link }}" hidden>&#9654; Reproducir playlist</button>
+            <a class="btn-link" href="{{ item.link }}" target="_blank" rel="noopener noreferrer">Abrir URL</a>
+            <a class="btn-link" href="{% url 'search:playlist' %}?url={{ item.link|urlencode }}">Ver lista</a>
+            {% if item.link in playlist_links %}
+            <button type="button" class="fav-btn fav-on" disabled>&#10003; Playlist guardada</button>
+            {% else %}
+            <form method="post" action="{% url 'search:save_playlist' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="title" value="{{ item.title }}">
+                <input type="hidden" name="link" value="{{ item.link }}">
+                <input type="hidden" name="thumbnail" value="{{ item.thumbnail }}">
+                <input type="hidden" name="source" value="{{ item.source }}">
+                <input type="hidden" name="color" value="{{ item.color }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn">&#43; Guardar playlist</button>
+            </form>
+            {% endif %}
+            {% else %}
+            <button type="button" class="watch-btn" data-src="{{ item.link }}" hidden>&#9654; Reproducir aquí</button>
+
+            {% if remove_mode %}
+            <form method="post" action="{% url 'search:favorites' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="link" value="{{ item.link }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn">&#10005; Quitar</button>
+            </form>
+            {% elif item.link in favorite_links %}
+            <button type="button" class="fav-btn fav-on" disabled>&#9733; Guardado</button>
+            {% else %}
+            <form method="post" action="{% url 'search:favorites' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="title" value="{{ item.title }}">
+                <input type="hidden" name="link" value="{{ item.link }}">
+                <input type="hidden" name="thumbnail" value="{{ item.thumbnail }}">
+                <input type="hidden" name="source" value="{{ item.source }}">
+                <input type="hidden" name="color" value="{{ item.color }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn">&#9733; Guardar</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>

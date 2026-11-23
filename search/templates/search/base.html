@@ -1,0 +1,629 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}PluriTube 🎥{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --panel: #121212;
+            --panel-2: #171717;
+            --text: #a9b84f;        /* verde oliva */
+            --text-dim: #7f8a3c;
+            --text-bright: #c4d36a;
+            --red: #5e1616;         /* rojo oscuro (reborde) */
+            --red-bright: #8f2020;
+            --brand-red: #c62828;   /* rojo de marca, versión legible del reborde */
+        }
+
+        * { box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
+        .container { max-width: 1000px; margin: auto; }
+
+        /* Navegación */
+        .topnav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 24px; background: var(--panel); padding: 10px; border: 1px solid var(--red); border-radius: 0; }
+        .topnav a { padding: 10px 16px; border-radius: 0; text-decoration: none; color: var(--text); font-weight: bold; font-size: 14px; border: 1px solid transparent; }
+        .topnav a:hover { background: var(--red); color: var(--text-bright); border-color: var(--red-bright); }
+
+        /* Marca del sitio */
+        .brand { margin-right: auto; font-size: 18px; font-weight: 900; letter-spacing: 0.5px; text-decoration: none; white-space: nowrap; padding: 10px 14px 10px 4px; }
+        .topnav a.brand:hover { background: transparent; }
+        .brand .brand-pluri { color: var(--brand-red); }
+        .brand .brand-tube { color: var(--text-bright); }
+        .brand-tagline { color: var(--text-dim); }
+
+        .search-area .brand-title { color: var(--text-bright); font-size: 2.2rem; margin: 0 0 8px; font-weight: 900; letter-spacing: 0.5px; }
+        .search-area .brand-title .brand-pluri { color: var(--brand-red); }
+        .search-area .brand-title .brand-tube { color: var(--text-bright); }
+        .brand-links { margin-top: 6px; }
+        .brand-links a { color: var(--text-bright); text-decoration: none; }
+        .brand-links a:hover { text-decoration: underline; }
+
+        .search-area { background: var(--panel); padding: 40px; border-radius: 0; border: 1px solid var(--red); text-align: center; margin-bottom: 30px; }
+        .search-area h1 { color: var(--text-bright); }
+        .search-form { display: flex; gap: 10px; max-width: 600px; margin: 20px auto 0; }
+        .search-form input { flex: 1; padding: 15px; background: #0d0d0d; color: var(--text-bright); border: 1px solid var(--red); border-radius: 0; font-size: 16px; outline: none; }
+        .search-form input:focus { border-color: var(--red-bright); }
+        .search-form button { padding: 15px 30px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; cursor: pointer; font-weight: bold; transition: 0.15s; }
+        .search-form button:hover { background: var(--red); color: var(--text-bright); }
+
+        .results-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .card { display: flex; background: var(--panel); border-radius: 0; overflow: hidden; border: 1px solid var(--red); border-left: 6px solid var(--red); }
+        .card img { width: 280px; height: 180px; object-fit: cover; background-color: #222; display: block; }
+        .card-content { padding: 20px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .card-content h3 { margin: 0 0 10px; font-size: 1.25rem; line-height: 1.3; }
+        .card-content h3 a { color: var(--text-bright); text-decoration: none; }
+        .card-content h3 a:hover { color: #e6ee9a; text-decoration: underline; }
+
+        .source-label { font-size: 11px; font-weight: bold; text-transform: uppercase; padding: 4px 8px; border-radius: 0; display: inline-block; margin-bottom: 10px; color: #fff; }
+        .description { font-size: 14px; color: var(--text-dim); line-height: 1.5; }
+
+        .pagination { margin: 40px 0; text-align: center; }
+        .pagination a, .pagination span { padding: 12px 20px; margin: 0 5px; background: var(--panel); border: 1px solid var(--red); border-radius: 0; text-decoration: none; color: var(--text); }
+        .pagination a:hover { background: var(--red); color: var(--text-bright); }
+        .pagination .current { background: var(--red); color: var(--text-bright); border-color: var(--red-bright); }
+
+        /* Acciones de tarjeta */
+        .card-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+        .inline-form { margin: 0; }
+        .watch-btn { padding: 9px 16px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; font-size: 13px; cursor: pointer; transition: 0.15s; }
+        .watch-btn:hover { background: var(--red); color: var(--text-bright); }
+        .fav-btn { padding: 9px 14px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .fav-btn:hover { background: var(--red); color: var(--text-bright); }
+        .fav-btn.fav-on { background: #101010; color: var(--text-dim); border-color: var(--red); cursor: default; }
+        .btn-link { display: inline-block; padding: 9px 14px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; font-size: 13px; text-decoration: none; }
+        .btn-link:hover { background: var(--red); color: var(--text-bright); }
+
+        /* Canal del vídeo + botón de suscripción */
+        .card-channel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 8px; font-size: 13px; color: var(--text-dim); }
+        .channel-link { color: var(--text); text-decoration: none; font-weight: bold; }
+        .channel-link:hover { color: var(--text-bright); text-decoration: underline; }
+        .card-channel .fav-btn { padding: 5px 10px; font-size: 12px; }
+
+        /* Filtros de la lista de suscripciones */
+        .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0; }
+        .filter-bar a { padding: 8px 14px; background: var(--panel); border: 1px solid var(--red); border-radius: 0; color: var(--text); text-decoration: none; font-size: 13px; font-weight: bold; }
+        .filter-bar a:hover { background: var(--red); color: var(--text-bright); }
+        .filter-bar a.active { background: var(--red); color: var(--text-bright); border-color: var(--red-bright); }
+
+        /* Importar configuración */
+        .import-form { display: flex; flex-direction: column; gap: 10px; max-width: 680px; margin: 16px 0; }
+        .import-form textarea { width: 100%; padding: 12px; background: #0d0d0d; color: var(--text-bright); border: 1px solid var(--red); border-radius: 0; font-family: monospace; font-size: 13px; outline: none; }
+        .import-form textarea:focus { border-color: var(--red-bright); }
+        .import-form input[type="file"] { color: var(--text); }
+        .import-form button { align-self: flex-start; padding: 12px 22px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; cursor: pointer; }
+        .import-form button:hover { background: var(--red); color: var(--text-bright); }
+        .notice { background: #10240f; color: #b6e0a0; padding: 10px 14px; border: 1px solid #2f6b2f; border-radius: 0; }
+
+        /* Formularios de biblioteca */
+        .lib-form { display: flex; gap: 10px; max-width: 680px; margin: 16px 0; flex-wrap: wrap; }
+        .lib-form input[type="text"] { flex: 1; min-width: 220px; padding: 12px; background: #0d0d0d; color: var(--text-bright); border: 1px solid var(--red); border-radius: 0; font-size: 15px; outline: none; }
+        .lib-form input[type="text"]:focus { border-color: var(--red-bright); }
+        .lib-form button { padding: 12px 22px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; cursor: pointer; }
+        .lib-form button:hover { background: var(--red); color: var(--text-bright); }
+
+        .page-head { margin-bottom: 20px; }
+        .page-head h1 { margin: 0 0 6px; color: var(--text-bright); }
+        .page-head p { margin: 0; color: var(--text-dim); }
+        .section-title { margin: 28px 0 12px; color: var(--text-bright); }
+        .empty { color: var(--text-dim); background: var(--panel); padding: 20px; border: 1px solid var(--red); border-radius: 0; }
+        .errors { list-style: none; background: #2a0d0d; color: #e0a0a0; padding: 10px 14px; border: 1px solid var(--red-bright); border-radius: 0; }
+        .sub-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--panel); padding: 12px 16px; border: 1px solid var(--red); border-radius: 0; margin-bottom: 8px; flex-wrap: wrap; }
+        .sub-row small { color: var(--text-dim); }
+        .row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .sub-row .inline-form button { padding: 6px 12px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; cursor: pointer; }
+        .sub-row .inline-form button:hover { background: var(--red); color: var(--text-bright); }
+
+        /* Reproductor propio en superposición */
+        .player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+        .player-overlay[hidden] { display: none; }
+        .player-box { background: #0d0d0d; border: 1px solid var(--red-bright); border-radius: 0; overflow: hidden; width: min(900px, 100%); }
+        .player-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel); color: var(--text-bright); border-bottom: 1px solid var(--red); }
+        .player-head span { flex: 1; font-size: 14px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .player-close { background: transparent; border: none; color: var(--text); font-size: 20px; line-height: 1; cursor: pointer; }
+        .player-close:hover { color: var(--text-bright); }
+        .player-box video { width: 100%; max-height: 70vh; background: #000; display: block; }
+        .player-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--red); }
+        .player-nav[hidden] { display: none; }
+        .player-step { padding: 8px 14px; background: var(--panel-2); color: var(--text); border: 1px solid var(--red-bright); border-radius: 0; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .player-step:hover:not(:disabled) { background: var(--red); color: var(--text-bright); }
+        .player-step:disabled { opacity: 0.4; cursor: default; }
+        .player-counter { font-size: 13px; color: var(--text-dim); }
+        .player-status { margin: 0; padding: 10px 16px; color: var(--text-dim); font-size: 13px; min-height: 18px; }
+
+        /* Menú desplegable con la lista completa de la playlist */
+        .player-list-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--red); }
+        .player-list-bar[hidden] { display: none; }
+        .player-list-label { font-size: 13px; font-weight: bold; color: var(--text-dim); white-space: nowrap; }
+        .player-select { flex: 1; min-width: 0; max-width: 100%; padding: 8px 10px; background: #0d0d0d; color: var(--text-bright); border: 1px solid var(--red); border-radius: 0; font-size: 13px; outline: none; cursor: pointer; }
+        .player-select:focus { border-color: var(--red-bright); }
+
+        /* Controles de la cola (auto / bucle / aleatorio) */
+        .player-controls { display: flex; align-items: center; gap: 18px; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--red); flex-wrap: wrap; }
+        .player-controls[hidden] { display: none; }
+        .player-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text); cursor: pointer; user-select: none; }
+        .player-toggle[hidden] { display: none; }
+        .player-toggle input { accent-color: var(--red-bright); width: 15px; height: 15px; cursor: pointer; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="container">
+    <nav class="topnav">
+        <a class="brand" href="{% url 'search:search' %}"><span class="brand-pluri">Pluri</span><span class="brand-tube">Tube</span> 🎥</a>
+        <a href="{% url 'search:search' %}">Buscar</a>
+        <a href="{% url 'search:favorites' %}">Favoritos</a>
+        <a href="{% url 'search:subscriptions' %}">Suscripciones</a>
+        <a href="{% url 'search:playlist' %}">Playlist</a>
+        <a href="{% url 'search:export' %}">Exportar</a>
+        <a href="{% url 'search:import' %}">Importar</a>
+    </nav>
+
+    {% block content %}{% endblock %}
+</div>
+
+<div id="player-overlay" class="player-overlay" hidden>
+    <div class="player-box" role="dialog" aria-modal="true" aria-label="Reproductor de vídeo">
+        <div class="player-head">
+            <span id="player-title"></span>
+            <button type="button" id="player-close" class="player-close" aria-label="Cerrar">&#10005;</button>
+        </div>
+        <video id="player-video" controls playsinline preload="metadata"></video>
+        <div id="player-controls" class="player-controls" hidden>
+            <label class="player-toggle"><input type="checkbox" id="ctrl-auto" checked> Auto</label>
+            <label class="player-toggle"><input type="checkbox" id="ctrl-loop"> Bucle</label>
+            <label class="player-toggle"><input type="checkbox" id="ctrl-shuffle"> Aleatorio</label>
+        </div>
+        <div id="player-nav" class="player-nav" hidden>
+            <button type="button" id="player-prev" class="player-step">&#9664; Anterior</button>
+            <span id="player-counter" class="player-counter"></span>
+            <button type="button" id="player-next" class="player-step">Siguiente &#9654;</button>
+        </div>
+        <div id="player-list-bar" class="player-list-bar" hidden>
+            <label class="player-list-label" for="player-select">Playlist:</label>
+            <select id="player-select" class="player-select"></select>
+        </div>
+        <p id="player-status" class="player-status"></p>
+    </div>
+</div>
+
+<script>
+(function () {
+    var overlay = document.getElementById('player-overlay');
+    if (!overlay) return;
+
+    var video = document.getElementById('player-video');
+    var titleEl = document.getElementById('player-title');
+    var statusEl = document.getElementById('player-status');
+    var navEl = document.getElementById('player-nav');
+    var counterEl = document.getElementById('player-counter');
+    var prevBtn = document.getElementById('player-prev');
+    var nextBtn = document.getElementById('player-next');
+    var listBar = document.getElementById('player-list-bar');
+    var playlistSelect = document.getElementById('player-select');
+    var resolveUrl = "{% url 'search:resolve' %}";
+    var playlistApi = "{% url 'search:playlist_api' %}";
+    var hlsScript = "{% static 'search/hls.min.js' %}";
+
+    var controlsEl = document.getElementById('player-controls');
+    var autoCtrl = document.getElementById('ctrl-auto');
+    var loopCtrl = document.getElementById('ctrl-loop');
+    var shuffleCtrl = document.getElementById('ctrl-shuffle');
+
+    var videoButtons = document.querySelectorAll('.watch-btn[data-src]');
+    var playlistButtons = document.querySelectorAll('.playlist-play-btn');
+
+    navEl.hidden = true;
+    controlsEl.hidden = true;
+
+    // Progressive enhancement: sin JS estos botones no existen para el usuario.
+    videoButtons.forEach(function (b) { b.hidden = false; });
+    playlistButtons.forEach(function (b) { b.hidden = false; });
+
+    if (!videoButtons.length && !playlistButtons.length) return;
+
+    var queue = [];
+    var queueIndex = -1;
+    var failed = 0;
+    var hlsPlayer = null;
+    // Token de la reproducción vigente: descarta respuestas/resoluciones tardías
+    // de un vídeo que ya no es el actual (saltos rápidos, desplegable, etc.).
+    var playToken = 0;
+
+    // Preferencias del reproductor, recordadas en el navegador.
+    var PREFS_KEY = 'truchitube-player-prefs';
+    var prefs = { auto: true, loop: false, shuffle: false };
+    try {
+        var savedPrefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+        if (savedPrefs && typeof savedPrefs === 'object') {
+            prefs.auto = savedPrefs.auto !== false;
+            prefs.loop = savedPrefs.loop === true;
+            prefs.shuffle = savedPrefs.shuffle === true;
+        }
+    } catch (error) { /* localStorage no disponible */ }
+
+    autoCtrl.checked = prefs.auto;
+    loopCtrl.checked = prefs.loop;
+    shuffleCtrl.checked = prefs.shuffle;
+
+    function savePrefs() {
+        try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (error) {}
+    }
+
+    function setStatus(text) { statusEl.textContent = text || ''; }
+
+    function shuffle(list) {
+        for (var i = list.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+        }
+        return list;
+    }
+
+    function destroyHls() {
+        if (hlsPlayer) {
+            try { hlsPlayer.destroy(); } catch (error) { /* ya destruido */ }
+            hlsPlayer = null;
+        }
+    }
+
+    function resetVideo() {
+        delete video.dataset.want;
+        destroyHls();
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+    }
+
+    function openPlayer() {
+        overlay.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closePlayer() {
+        playToken += 1;  // invalida resoluciones en vuelo
+        resetVideo();
+        queue = [];
+        queueIndex = -1;
+        failed = 0;
+        navEl.hidden = true;
+        listBar.hidden = true;
+        playlistSelect.innerHTML = '';
+        controlsEl.hidden = true;
+        counterEl.textContent = '';
+        overlay.hidden = true;
+        setStatus('');
+        document.body.style.overflow = '';
+    }
+
+    // Construye las opciones del desplegable con toda la playlist.
+    function buildPlaylistSelect() {
+        playlistSelect.innerHTML = '';
+        queue.forEach(function (entry, index) {
+            var option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = (index + 1) + '. ' + (entry.title || 'Vídeo');
+            playlistSelect.appendChild(option);
+        });
+    }
+
+    function updateNav() {
+        if (queue.length <= 1) {
+            navEl.hidden = true;
+            listBar.hidden = true;
+            counterEl.textContent = '';
+            return;
+        }
+        navEl.hidden = false;
+        listBar.hidden = false;
+        counterEl.textContent = (queueIndex + 1) + ' / ' + queue.length;
+        prevBtn.disabled = !prefs.loop && queueIndex <= 0;
+        nextBtn.disabled = !prefs.loop && queueIndex >= queue.length - 1;
+        if (queueIndex >= 0) playlistSelect.value = String(queueIndex);
+    }
+
+    function updateControls() {
+        var multi = queue.length > 1;
+        controlsEl.hidden = queue.length < 1;
+        autoCtrl.parentNode.hidden = !multi;
+        shuffleCtrl.parentNode.hidden = !multi;
+    }
+
+    // Carga hls.js sólo cuando hace falta (los HLS de PeerTube).
+    var hlsLoading = false;
+    var hlsWaiters = [];
+    function loadHlsScript(callback) {
+        if (window.Hls) { callback(null); return; }
+        hlsWaiters.push(callback);
+        if (hlsLoading) return;
+        hlsLoading = true;
+        var script = document.createElement('script');
+        script.src = hlsScript;
+        script.onload = function () {
+            hlsLoading = false;
+            var waiters = hlsWaiters.slice();
+            hlsWaiters = [];
+            waiters.forEach(function (fn) { fn(null); });
+        };
+        script.onerror = function () {
+            hlsLoading = false;
+            var waiters = hlsWaiters.slice();
+            hlsWaiters = [];
+            waiters.forEach(function (fn) { fn(new Error('hls')); });
+        };
+        document.head.appendChild(script);
+    }
+
+    function playHls(data, token) {
+        return new Promise(function (resolve) {
+            if (token !== playToken) { resolve({ ok: false, stale: true }); return; }
+            var nativeHls = !window.MediaSource && video.canPlayType('application/vnd.apple.mpegurl');
+            if (nativeHls) {
+                destroyHls();
+                video.dataset.want = '1';
+                video.src = data.stream;
+                var nativePlay = video.play();
+                if (nativePlay && nativePlay.catch) nativePlay.catch(function () {});
+                resolve({ ok: true });
+                return;
+            }
+            loadHlsScript(function (error) {
+                if (token !== playToken) { resolve({ ok: false, stale: true }); return; }
+                if (error || !window.Hls || !window.Hls.isSupported()) {
+                    resolve({ ok: false, error: 'Este navegador no puede reproducir este formato.' });
+                    return;
+                }
+                destroyHls();
+                var settled = false;
+                var player = new window.Hls({ enableWorker: true });
+                hlsPlayer = player;
+                function finish(result) {
+                    if (settled) return;
+                    settled = true;
+                    resolve(result);
+                }
+                player.on(window.Hls.Events.MANIFEST_PARSED, function () {
+                    if (token !== playToken) { finish({ ok: false, stale: true }); return; }
+                    video.dataset.want = '1';
+                    var playing = video.play();
+                    if (playing && playing.catch) playing.catch(function () {});
+                    finish({ ok: true });
+                });
+                player.on(window.Hls.Events.ERROR, function (event, info) {
+                    if (!info || !info.fatal) return;
+                    if (!settled) {
+                        finish({ ok: false, error: 'No se pudo reproducir el vídeo (HLS).' });
+                    } else if (hlsPlayer === player) {
+                        onFailure('El vídeo falló al reproducirse (HLS).', token);
+                    }
+                });
+                player.loadSource(data.stream);
+                player.attachMedia(video);
+            });
+        });
+    }
+
+    function resolveAndPlay(link, token) {
+        return fetch(resolveUrl + '?url=' + encodeURIComponent(link))
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function (result) {
+                if (token !== playToken) return { ok: false, stale: true };
+                if (!result.ok || !result.data.ok) {
+                    return {
+                        ok: false,
+                        error: (result.data && result.data.error) || 'No se pudo cargar el vídeo.'
+                    };
+                }
+                titleEl.textContent = result.data.title || 'Vídeo';
+                setStatus('');
+                if (result.data.kind === 'hls') {
+                    return playHls(result.data, token);
+                }
+                destroyHls();
+                video.dataset.want = '1';
+                video.src = result.data.stream;
+                var playing = video.play();
+                if (playing && playing.catch) playing.catch(function () {});
+                return { ok: true };
+            })
+            .catch(function () {
+                if (token !== playToken) return { ok: false, stale: true };
+                return { ok: false, error: 'Error de red al resolver el vídeo.' };
+            });
+    }
+
+    // Si un vídeo falla, se salta al siguiente automáticamente.
+    function onFailure(message, token) {
+        // Ignora fallos de una reproducción que ya no está activa.
+        if (token !== undefined && token !== playToken) return;
+        failed += 1;
+        var base = message || 'No se pudo reproducir el vídeo.';
+        if (failed >= queue.length) {
+            setStatus(base);
+            return;
+        }
+        if (!prefs.auto) {
+            setStatus(base + ' Pulsa «Siguiente» para continuar.');
+            return;
+        }
+        var next = queueIndex + 1;
+        if (next >= queue.length) {
+            if (!prefs.loop) {
+                setStatus(base + ' Fin de la lista.');
+                return;
+            }
+            next = 0;
+        }
+        setStatus(base + ' Saltando al siguiente…');
+        setTimeout(function () { playIndex(next); }, 900);
+    }
+
+    function wrapIndex(index) {
+        if (index < 0) return prefs.loop ? queue.length - 1 : 0;
+        if (index >= queue.length) return prefs.loop ? 0 : queue.length - 1;
+        return index;
+    }
+
+    function playIndex(index) {
+        if (!queue.length) return;
+        queueIndex = wrapIndex(index);
+        updateNav();
+        var token = ++playToken;
+        var entry = queue[queueIndex];
+        resetVideo();
+        titleEl.textContent = entry.title || 'Cargando…';
+        setStatus('Extrayendo el vídeo a través del servidor…');
+        resolveAndPlay(entry.link, token).then(function (result) {
+            if (token !== playToken) return;
+            if (result.ok) {
+                failed = 0;
+                if (entry.title) titleEl.textContent = entry.title;
+                return;
+            }
+            if (result.stale) return;
+            onFailure(result.error, token);
+        });
+    }
+
+    function startQueue(title, entries) {
+        queue = (entries || []).filter(function (entry) {
+            return entry && entry.link;
+        });
+        if (prefs.shuffle) shuffle(queue);
+        queueIndex = -1;
+        failed = 0;
+        buildPlaylistSelect();
+        updateControls();
+        if (!queue.length) {
+            updateNav();
+            setStatus('La playlist no contiene vídeos reproducibles.');
+            return;
+        }
+        if (title) titleEl.textContent = title;
+        playIndex(0);
+    }
+
+    // Al terminar un vídeo: repetir (bucle) o avanzar al siguiente.
+    video.addEventListener('ended', function () {
+        if (!queue.length) return;
+        if (prefs.loop) {
+            playIndex(queueIndex + 1);
+            return;
+        }
+        if (prefs.auto && queueIndex + 1 < queue.length) playIndex(queueIndex + 1);
+    });
+
+    // Si el propio elemento <video> falla, se salta al siguiente.
+    video.addEventListener('error', function () {
+        if (video.dataset.want !== '1') return;
+        onFailure('El vídeo falló al reproducirse.');
+    });
+
+    prevBtn.addEventListener('click', function () { playIndex(queueIndex - 1); });
+    nextBtn.addEventListener('click', function () { playIndex(queueIndex + 1); });
+
+    // Interruptores de reproducción (se recuerdan entre visitas).
+    autoCtrl.addEventListener('change', function () {
+        prefs.auto = autoCtrl.checked; savePrefs(); updateNav();
+    });
+    loopCtrl.addEventListener('change', function () {
+        prefs.loop = loopCtrl.checked; savePrefs(); updateNav();
+    });
+    shuffleCtrl.addEventListener('change', function () {
+        prefs.shuffle = shuffleCtrl.checked; savePrefs();
+        if (prefs.shuffle && queue.length > 1) {
+            // Mezcla sólo lo que queda por delante del vídeo actual.
+            var head = queue.slice(0, queueIndex + 1);
+            var tail = shuffle(queue.slice(queueIndex + 1));
+            queue = head.concat(tail);
+            buildPlaylistSelect();
+            if (queueIndex >= 0) playlistSelect.value = String(queueIndex);
+        }
+    });
+
+    // Desplegable: saltar directamente a cualquier vídeo de la lista.
+    playlistSelect.addEventListener('change', function () {
+        var index = parseInt(playlistSelect.value, 10);
+        if (!isNaN(index)) playIndex(index);
+    });
+
+    // Sólo la «✕» cierra el reproductor (ni clic fuera ni Escape).
+    document.getElementById('player-close').addEventListener('click', closePlayer);
+
+    // Vídeo suelto: cola de un elemento, sin controles de playlist.
+    videoButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            openPlayer();
+            startQueue('', [{ link: button.getAttribute('data-src') }]);
+        });
+    });
+
+    function embeddedPlaylist() {
+        var node = document.getElementById('playlist-data');
+        if (!node) return null;
+        try {
+            return JSON.parse(node.textContent);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function loadPlaylistFromApi(url) {
+        openPlayer();
+        queue = [];
+        queueIndex = -1;
+        failed = 0;
+        updateNav();
+        updateControls();
+        titleEl.textContent = 'Cargando playlist…';
+        setStatus('Leyendo la playlist a través del servidor (yt-dlp)…');
+
+        fetch(playlistApi + '?url=' + encodeURIComponent(url))
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function (result) {
+                if (!result.ok || !result.data.ok) {
+                    setStatus(
+                        (result.data && result.data.error) ||
+                        'No se pudo leer la playlist.'
+                    );
+                    return;
+                }
+                startQueue(result.data.title, result.data.entries);
+            })
+            .catch(function () {
+                setStatus('Error de red al leer la playlist.');
+            });
+    }
+
+    playlistButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            if (button.getAttribute('data-embedded') === '1') {
+                var data = embeddedPlaylist();
+                openPlayer();
+                if (!data) {
+                    setStatus('No se pudo leer la playlist cargada.');
+                    return;
+                }
+                startQueue(data.title, data.entries);
+                return;
+            }
+            loadPlaylistFromApi(button.getAttribute('data-playlist'));
+        });
+    });
+})();
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

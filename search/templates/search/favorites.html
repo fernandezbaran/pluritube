@@ -1,0 +1,20 @@
+{% extends "search/base.html" %}
+
+{% block title %}Favoritos · PluriTube 🎥{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>Favoritos</h1>
+    <p>Guardados en tu sesión. Se conservan mientras dure la cookie de sesión.</p>
+</div>
+
+{% if favorites %}
+<div class="results-grid">
+    {% for item in favorites %}
+        {% include "search/_card.html" with item=item next=request.get_full_path %}
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">Todavía no tienes favoritos. Pulsa «&#9733; Guardar» en cualquier resultado, playlist o suscripción.</p>
+{% endif %}
+{% endblock %}

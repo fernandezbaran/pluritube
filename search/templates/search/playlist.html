@@ -1,0 +1,75 @@
+{% extends "search/base.html" %}
+
+{% block title %}Playlist · PluriTube 🎥{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>Playlist</h1>
+    <p>Pega una URL de playlist (YouTube, PeerTube, etc.) o abre una de tus playlists guardadas.</p>
+</div>
+
+<form method="get" class="lib-form">
+    <input type="text" name="url" value="{{ url }}"
+           placeholder="https://www.youtube.com/playlist?list=..." required>
+    <button type="submit">Cargar</button>
+</form>
+
+{% if error %}
+<p class="errors">{{ error }}</p>
+{% endif %}
+
+<h2 class="section-title">Tus playlists</h2>
+{% for saved in playlists %}
+<div class="sub-row">
+    <span>{{ saved.title }}</span>
+    <div class="row-actions">
+        <button type="button" class="watch-btn playlist-play-btn" data-playlist="{{ saved.link }}" hidden>&#9654; Reproducir</button>
+        <a class="btn-link" href="{{ saved.link }}" target="_blank" rel="noopener noreferrer">Abrir URL</a>
+        <a class="btn-link" href="{% url 'search:playlist' %}?url={{ saved.link|urlencode }}">Ver lista</a>
+        <form method="post" action="{% url 'search:save_playlist' %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="link" value="{{ saved.link }}">
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit">Quitar</button>
+        </form>
+    </div>
+</div>
+{% empty %}
+<p class="empty">Aún no has guardado playlists. Búscalas y pulsa «Guardar playlist».</p>
+{% endfor %}
+
+{% if playlist %}
+<h2 class="section-title">{{ playlist.title }} ({{ playlist.entries|length }})</h2>
+
+<div class="row-actions" style="margin-bottom: 16px;">
+    <button type="button" class="watch-btn playlist-play-btn" data-embedded="1" hidden>&#9654; Reproducir playlist</button>
+    <a class="btn-link" href="{{ url }}" target="_blank" rel="noopener noreferrer">Abrir URL</a>
+</div>
+
+{% if not saved %}
+<form method="post" action="{% url 'search:save_playlist' %}" class="lib-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <input type="hidden" name="title" value="{{ playlist.title }}">
+    <input type="hidden" name="link" value="{{ url }}">
+    <input type="hidden" name="source" value="YouTube Playlist">
+    <input type="hidden" name="color" value="#ff0000">
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">&#43; Guardar esta playlist</button>
+</form>
+{% endif %}
+
+{% if playlist.entries %}
+<div class="results-grid">
+    {% for item in playlist.entries %}
+        {% include "search/_card.html" with item=item next=request.get_full_path %}
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">La playlist no contiene vídeos reproducibles.</p>
+{% endif %}
+
+{{ playlist_data|json_script:"playlist-data" }}
+{% endif %}
+{% endblock %}

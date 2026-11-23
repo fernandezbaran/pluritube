@@ -1,0 +1,71 @@
+{% extends "search/base.html" %}
+
+{% block title %}Suscripciones · PluriTube 🎥{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>Suscripciones</h1>
+    <p>Añade canales de YouTube o PeerTube; el backend resuelve su feed RSS. Los vídeos se muestran en orden cronológico.</p>
+</div>
+
+<form method="post" class="lib-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <input type="text" name="channel"
+           placeholder="youtube.com/@canal, @canal, UC... o URL de canal PeerTube"
+           required>
+    <button type="submit">Suscribirse</button>
+</form>
+
+{% if errors %}
+<ul class="errors">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<h2 class="section-title">Tus suscripciones</h2>
+{% for sub in subscriptions %}
+<div class="sub-row">
+    <span>{{ sub.title }} <small>({{ sub.source }})</small></span>
+    <form method="post" class="inline-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="feed_url" value="{{ sub.feed_url }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit">Quitar</button>
+    </form>
+</div>
+{% empty %}
+<p class="empty">Aún no sigues ningún canal.</p>
+{% endfor %}
+
+<h2 class="section-title">Vídeos ({{ entries|length }} de {{ total_entries }})</h2>
+
+{% if subscriptions %}
+<div class="filter-bar">
+    <a class="{% if filter == 'all' and not channel %}active{% endif %}" href="?filter=all">Todos</a>
+    <a class="{% if filter == 'youtube' and not channel %}active{% endif %}" href="?filter=youtube">YouTube</a>
+    <a class="{% if filter == 'pep' and not channel %}active{% endif %}" href="?filter=pep">PeerTube</a>
+    {% for sub in subscriptions %}
+    <a class="{% if channel == sub.feed_url %}active{% endif %}" href="?filter={{ filter }}&amp;channel={{ sub.feed_url|urlencode }}">{{ sub.title }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if playlist_data.entries %}
+<div class="row-actions" style="margin-bottom: 16px;">
+    <button type="button" class="watch-btn playlist-play-btn" data-embedded="1" hidden>&#9654; Reproducir todo como playlist</button>
+</div>
+{{ playlist_data|json_script:"playlist-data" }}
+{% endif %}
+
+{% if entries %}
+<div class="results-grid">
+    {% for item in entries %}
+        {% include "search/_card.html" with item=item next=request.get_full_path %}
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">No hay vídeos que mostrar con este filtro.</p>
+{% endif %}
+{% endblock %}
