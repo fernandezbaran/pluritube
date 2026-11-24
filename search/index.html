@@ -1,0 +1,25 @@
+{% extends "search/base.html" %}
+
+{% block title %}Buscar · PluriTube 🎥{% endblock %}
+
+{% block content %}
+<div class="search-area">
+    <h1 class="brand-title"><span class="brand-pluri">Pluri</span><span class="brand-tube">Tube</span> 🎥</h1>
+    <p class="brand-tagline">Meta buscador y frontend alternativo para Youtube y PeerTube | Creado y mantenido por Fabricio E. Fernández</p>
+    <p class="brand-tagline brand-links">
+        <a href="https://github.com/fernandezbaran/pluritube">Código fuente</a> | <a href="https://github.com/fernandezbaran/pluritube/blob/main/LICENSE.txt">Licencia de uso</a>
+    </p>
+    <form method="GET" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="Buscar videos en Youtube y Peertube" required>
+        <button type="submit">Buscar</button>
+    </form>
+</div>
+
+<div class="results-grid">
+    {% for item in page_obj %}
+        {% include "search/_card.html" with item=item next=request.get_full_path %}
+    {% endfor %}
+</div>
+
+{% include "search/_pagination.html" with page_obj=page_obj page_base=page_base %}
+{% endblock %}
