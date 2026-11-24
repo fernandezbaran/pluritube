@@ -34,7 +34,7 @@ PluriTube agrega en una sola página los resultados de búsqueda de **YouTube** 
 - Muestra el **nombre del canal** en cada tarjeta y permite **suscribirse** a ese canal con un clic.
 - Página de **suscripciones** que junta los vídeos de todos los canales seguidos en **orden cronológico**, con paneles plegables para gestionar los canales seguidos y para los filtros **multi-selección** (Todos / YouTube / PeerTube / canal) que se pueden combinar —sin JavaScript— y un botón para **reproducir todos como playlist**.
 - **Reproductor propio** (overlay) con cola, navegación anterior/siguiente, **desplegable con toda la lista** para saltar a cualquier vídeo y controles **Auto / Bucle / Aleatorio**.
-- **Favoritos**, **playlists guardadas** y **suscripciones** guardados en la sesión del servidor.
+- **Favoritos**, **playlists guardadas** y **suscripciones** guardados en la sesión del servidor; los botones de guardar/suscribir **alternan** (pulsar de nuevo quita), y puedes **añadir un vídeo a favoritos pegando su URL**.
 - **Exportación e importación** de toda la configuración en un único JSON.
 
 ## Características
@@ -111,11 +111,11 @@ python manage.py runserver
 1. Escribe una búsqueda en la portada y pulsa **Buscar**. Verás resultados de YouTube y PeerTube mezclados.
 2. En cada tarjeta puedes:
    - **Reproducir aquí** el vídeo en el reproductor incrustado.
-   - **Guardar** el vídeo en favoritos.
-   - **Suscribirte** al canal.
-   - Si es una playlist: **Reproducir playlist**, **Abrir URL**, **Ver lista** o **Guardar playlist**.
+   - **Guardar / quitar** el vídeo de favoritos (el mismo botón alterna).
+   - **Suscribirte / desuscribirte** del canal (el mismo botón alterna).
+   - Si es una playlist: **Reproducir playlist**, **Abrir URL**, **Ver lista** o **Guardar / quitar** la playlist.
 3. En **Suscripciones** verás los vídeos de tus canales en orden cronológico. Filtra por plataforma o canal y pulsa **Reproducir todo como playlist**.
-4. En **Playlist** puedes abrir una playlist por URL, ver su lista y guardarla.
+4. En **Playlist** puedes abrir una playlist por URL, ver su lista y guardarla. En **Favoritos** puedes añadir un vídeo pegando su URL.
 5. En **Exportar** descargas tu configuración; en **Importar** la vuelves a cargar (subiendo el fichero o pegando el JSON).
 
 ### Reproductor
@@ -132,7 +132,7 @@ Todas están definidas en `search/urls.py` (namespace `search`) y montadas en la
 | Ruta | Método | Descripción |
 | --- | --- | --- |
 | `/` | GET | Búsqueda y listado paginado (`?q=`, `?page=`) |
-| `/favorites/` | GET/POST | Favoritos paginados (`?page=`, `action=add\|remove`) |
+| `/favorites/` | GET/POST | Favoritos paginados (`?page=`, `action=add\|add_url\|remove`) |
 | `/subscriptions/` | GET/POST | Suscripciones, listado cronológico paginado (`?page=`), filtros multi-selección (`?filter=youtube\|pep`, repetible; `?channel=`, repetible) |
 | `/playlist/` | GET | Abrir/ver una playlist (`?url=`) y playlists guardadas; entradas paginadas (`?page=`) y guardadas (`?spage=`) |
 | `/playlists/save/` | POST | Guardar/quitar playlist guardada |
@@ -225,7 +225,7 @@ source venv/bin/activate
 python manage.py test
 ```
 
-Actualmente: **71 tests OK**. Verificación adicional de configuración:
+Actualmente: **81 tests OK**. Verificación adicional de configuración:
 
 ```bash
 python manage.py check
