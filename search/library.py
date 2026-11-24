@@ -6,15 +6,20 @@
 - Las suscripciones se resuelven a un feed: YouTube (Atom) o PeerTube (RSS 2.0).
 """
 
+import hashlib
 import json
+import os
 import re
 import subprocess
+import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import requests
+from django.core.cache import cache
 
 from .player import PlayerError, validate_source_url, ytdlp_bin
 
@@ -24,8 +29,20 @@ PLAYLISTS_KEY = "playlists"
 MAX_FAVORITES = 200
 MAX_SUBSCRIPTIONS = 100
 MAX_PLAYLISTS = 100
-FEED_TIMEOUT = 20
+#: Tiempo máximo de una petición HTTP (feeds y resolución de canales).
+#: Acotado para que un origen caído no bloquee toda la página.
+FEED_TIMEOUT = int(os.environ.get("FEED_TIMEOUT", "8"))
 PLAYLIST_TIMEOUT = 120
+
+#: Caché de feeds (lado servidor, clave = URL del feed).
+#: Ventana de frescura: dentro de ella no se pide nada al origen.
+FEED_CACHE_TTL = int(os.environ.get("FEED_CACHE_TTL", str(60 * 10)))
+#: Retención máxima de una entrada: permite revalidar y servir "viejo si error".
+FEED_CACHE_RETENTION = int(os.environ.get("FEED_CACHE_RETENTION", str(60 * 60 * 24)))
+#: Versión del formato guardado (cambiarla invalida el caché anterior).
+FEED_CACHE_VERSION = "v1"
+#: Concurrencia máxima al descargar los feeds de las suscripciones.
+FEED_CONCURRENCY = int(os.environ.get("FEED_CONCURRENCY", "6"))
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -314,10 +331,81 @@ def _normalize_channel_input(raw):
     return "https://" + value
 
 
-def _fetch(url, timeout=FEED_TIMEOUT):
-    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+def _fetch(url, timeout=FEED_TIMEOUT, headers=None):
+    request_headers = {"User-Agent": USER_AGENT}
+    if headers:
+        request_headers.update(headers)
+    response = requests.get(url, headers=request_headers, timeout=timeout)
     response.raise_for_status()
     return response
+
+
+def _feed_cache_key(feed_url):
+    """Clave estable y segura del caché para una URL de feed."""
+    digest = hashlib.sha256(feed_url.encode("utf-8")).hexdigest()
+    return f"feed-{FEED_CACHE_VERSION}:{digest}"
+
+
+def _fetch_feed_document(feed_url):
+    """Devuelve los bytes de un feed usando caché + validación condicional.
+
+    - Dentro de ``FEED_CACHE_TTL`` no se toca la red.
+    - Pasado el TTL se revalida con ``If-None-Match`` / ``If-Modified-Since``
+      (un ``304`` refresca la entrada sin descargar el cuerpo).
+    - Si el origen falla al revalidar, se sirve lo cacheado ("viejo si error").
+    - ``FEED_CACHE_TTL <= 0`` desactiva el caché por completo.
+    """
+    if FEED_CACHE_TTL <= 0:
+        return _fetch(feed_url).content
+
+    key = _feed_cache_key(feed_url)
+    cached = cache.get(key)
+    now = time.time()
+
+    if cached:
+        body, etag, last_modified, stored_at = cached
+        if now - stored_at < FEED_CACHE_TTL:
+            return body
+
+        conditional = {}
+        if etag:
+            conditional["If-None-Match"] = etag
+        if last_modified:
+            conditional["If-Modified-Since"] = last_modified
+        try:
+            response = _fetch(feed_url, headers=conditional)
+        except requests.RequestException:
+            return body
+
+        if response.status_code == 304:
+            cache.set(key, (body, etag, last_modified, now), FEED_CACHE_RETENTION)
+            return body
+
+        body = response.content
+        cache.set(
+            key,
+            (
+                body,
+                response.headers.get("ETag"),
+                response.headers.get("Last-Modified"),
+                now,
+            ),
+            FEED_CACHE_RETENTION,
+        )
+        return body
+
+    response = _fetch(feed_url)
+    cache.set(
+        key,
+        (
+            response.content,
+            response.headers.get("ETag"),
+            response.headers.get("Last-Modified"),
+            now,
+        ),
+        FEED_CACHE_RETENTION,
+    )
+    return response.content
 
 
 def _resolve_youtube_channel_id(raw):
@@ -460,14 +548,43 @@ def _parse_rss(root, feed_url, limit):
 
 
 def fetch_feed(feed_url, limit=12):
-    response = _fetch(feed_url)
-    root = ET.fromstring(response.content)
+    body = _fetch_feed_document(feed_url)
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as exc:
+        raise PlayerError("El feed no tiene un formato válido.") from exc
     tag = root.tag.lower()
     if tag.endswith("feed"):
         return _parse_atom(root, feed_url, limit)
     if tag.endswith("rss"):
         return _parse_rss(root, feed_url, limit)
     raise PlayerError("Formato de feed no reconocido.")
+
+
+def fetch_feeds(subscriptions, limit=12):
+    """Descarga varios feeds en paralelo con concurrencia acotada.
+
+    Devuelve ``[(subscription, feed, error)]`` en el mismo orden que la
+    entrada; ``feed`` es ``None`` cuando hubo error con ese canal.
+    """
+    subscriptions = list(subscriptions)
+    if not subscriptions:
+        return []
+    workers = max(1, min(FEED_CONCURRENCY, len(subscriptions)))
+    results = [None] * len(subscriptions)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(fetch_feed, sub.get("feed_url", ""), limit): index
+            for index, sub in enumerate(subscriptions)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            subscription = subscriptions[index]
+            try:
+                results[index] = (subscription, future.result(), None)
+            except (PlayerError, requests.RequestException) as exc:
+                results[index] = (subscription, None, str(exc))
+    return results
 
 
 def published_sort_key(entry):

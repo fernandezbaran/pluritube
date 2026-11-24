@@ -12,6 +12,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from django.core.cache import cache
 from django.http import QueryDict
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -610,3 +611,200 @@ class PaginationViewTests(TestCase):
         response = self.client.get(reverse("search:playlist"), {"spage": 2})
         self.assertEqual(len(response.context["saved_page"]), 1)
         self.assertEqual(response.context["saved_page_base"], "")
+
+
+class SubscriptionFilterTests(TestCase):
+    """Filtros multi-selección (sin JS) de la página de suscripciones."""
+
+    def _set_session(self, key, value):
+        session = self.client.session
+        session[key] = value
+        session.save()
+
+    def _subscription(self, feed_url, source):
+        return {
+            "feed_url": feed_url,
+            "title": "Canal",
+            "source": source,
+            "channel_url": feed_url,
+            "channel_key": feed_url,
+        }
+
+    def _entry(self, feed_url, index):
+        return {
+            "title": f"{feed_url}#{index}",
+            "link": f"{feed_url}/watch/{index}",
+            "thumbnail": "",
+            "description": "",
+            "source": "Canal",
+            "color": "#ff0000",
+            "published": "2026-01-01T00:00:00+00:00",
+        }
+
+    def setUp(self):
+        self.yt_url = "https://feeds.test/yt.xml"
+        self.peer_url = "https://feeds.test/peer.xml"
+        self.subs = [
+            self._subscription(self.yt_url, "YouTube"),
+            self._subscription(self.peer_url, "PeerTube"),
+        ]
+        self._set_session("subscriptions", self.subs)
+
+    def _fetch_feeds(self, subscriptions, limit=12):
+        feeds = {
+            self.yt_url: [self._entry(self.yt_url, i) for i in range(3)],
+            self.peer_url: [self._entry(self.peer_url, i) for i in range(2)],
+        }
+        return [
+            (sub, {"title": sub["title"], "entries": feeds[sub["feed_url"]]}, None)
+            for sub in subscriptions
+        ]
+
+    def _visible_titles(self, **params):
+        with patch.object(views.library, "fetch_feeds", side_effect=self._fetch_feeds):
+            response = self.client.get(reverse("search:subscriptions"), params)
+        self.assertEqual(response.status_code, 200)
+        return response, response.context
+
+    def test_no_filter_shows_every_source(self):
+        _response, context = self._visible_titles()
+        self.assertEqual(context["visible_count"], 5)
+        self.assertTrue(context["filter_chips"][0]["active"])  # "Todos"
+
+    def test_single_platform_filter(self):
+        _response, context = self._visible_titles(filter="youtube")
+        self.assertEqual(context["visible_count"], 3)
+        self.assertFalse(context["filter_chips"][0]["active"])
+
+    def test_multi_platform_union(self):
+        _response, context = self._visible_titles(
+            filter=["youtube", "pep"]
+        )
+        self.assertEqual(context["visible_count"], 5)
+
+    def test_multi_channel_union(self):
+        _response, context = self._visible_titles(
+            channel=[self.yt_url, self.peer_url]
+        )
+        self.assertEqual(context["visible_count"], 5)
+
+    def test_platform_and_channel_are_unioned(self):
+        response, context = self._visible_titles(filter="youtube", channel=self.peer_url)
+        self.assertEqual(context["visible_count"], 5)
+        self.assertEqual(context["page_base"], "filter=youtube&channel=https%3A%2F%2Ffeeds.test%2Fpeer.xml&")
+
+    def test_chip_toggle_query_reflects_active_selection(self):
+        _response, context = self._visible_titles(filter="youtube")
+        chips = {chip["label"]: chip for chip in context["filter_chips"]}
+        # El chip activo enlaza a su versión desactivada (sin filtros → "Todos").
+        self.assertTrue(chips["YouTube"]["active"])
+        self.assertEqual(chips["YouTube"]["query"], "")
+        # El chip inactivo enlaza a la selección con esa fuente añadida.
+        self.assertFalse(chips["PeerTube"]["active"])
+        self.assertEqual(
+            parse_qs(chips["PeerTube"]["query"]),
+            {"filter": ["pep", "youtube"]},
+        )
+
+    def test_todos_clears_selection(self):
+        _response, context = self._visible_titles()
+        chips = {chip["label"]: chip for chip in context["filter_chips"]}
+        self.assertEqual(chips["Todos"]["query"], "")
+
+
+class _FeedResponse:
+    """Respuesta mínima de ``requests`` para el caché de feeds."""
+
+    def __init__(self, content=b"", status=200, headers=None):
+        self.content = content
+        self.status_code = status
+        self.headers = headers or {}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(str(self.status_code))
+
+
+ATOM_FEED = (
+    b'<?xml version="1.0" encoding="UTF-8"?>'
+    b'<feed xmlns="http://www.w3.org/2005/Atom"><title>Canal</title></feed>'
+)
+
+
+class FeedCacheTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+
+    def _age(self, url):
+        """Envejece una entrada cacheada para forzar la revalidación."""
+        key = library._feed_cache_key(url)
+        body, etag, last_modified, _ = cache.get(key)
+        cache.set(key, (body, etag, last_modified, 0), None)
+
+    @patch.object(library.requests, "get")
+    def test_second_call_within_ttl_uses_cache(self, get):
+        get.return_value = _FeedResponse(ATOM_FEED)
+        first = library.fetch_feed("https://feeds.test/a.xml")
+        second = library.fetch_feed("https://feeds.test/a.xml")
+        self.assertEqual(first["title"], "Canal")
+        self.assertEqual(second["title"], "Canal")
+        self.assertEqual(get.call_count, 1)
+
+    @patch.object(library, "FEED_CACHE_TTL", 0)
+    @patch.object(library.requests, "get")
+    def test_ttl_zero_disables_cache(self, get):
+        get.return_value = _FeedResponse(ATOM_FEED)
+        library.fetch_feed("https://feeds.test/a.xml")
+        library.fetch_feed("https://feeds.test/a.xml")
+        self.assertEqual(get.call_count, 2)
+
+    @patch.object(library.requests, "get")
+    def test_stale_entry_is_revalidated_conditionally(self, get):
+        url = "https://feeds.test/a.xml"
+        get.return_value = _FeedResponse(ATOM_FEED, headers={"ETag": '"v1"'})
+        library.fetch_feed(url)
+        self._age(url)
+
+        get.return_value = _FeedResponse(b"", status=304)
+        library.fetch_feed(url)
+
+        sent = get.call_args.kwargs["headers"]
+        self.assertEqual(sent.get("If-None-Match"), '"v1"')
+
+    @patch.object(library.requests, "get")
+    def test_stale_if_error_serves_cached(self, get):
+        url = "https://feeds.test/a.xml"
+        get.return_value = _FeedResponse(ATOM_FEED)
+        library.fetch_feed(url)
+        self._age(url)
+
+        get.side_effect = requests.ConnectionError("boom")
+        feed = library.fetch_feed(url)
+        self.assertEqual(feed["title"], "Canal")
+
+    def test_invalid_xml_raises_player_error(self):
+        with patch.object(library, "_fetch_feed_document", return_value=b"<no-xml"):
+            with self.assertRaises(PlayerError):
+                library.fetch_feed("https://feeds.test/a.xml")
+
+
+class FetchFeedsTests(SimpleTestCase):
+    @patch.object(library, "fetch_feed")
+    def test_parallel_fetch_keeps_order(self, fetch_feed):
+        fetch_feed.side_effect = lambda url, limit=12: {"title": url, "entries": []}
+        subs = [{"feed_url": f"https://f/{i}"} for i in range(6)]
+        results = library.fetch_feeds(subs, 12)
+        self.assertEqual(
+            [r[0]["feed_url"] for r in results], [s["feed_url"] for s in subs]
+        )
+        self.assertTrue(all(r[2] is None for r in results))
+
+    @patch.object(library, "fetch_feed", side_effect=PlayerError("boom"))
+    def test_parallel_fetch_collects_errors(self, fetch_feed):
+        subs = [{"feed_url": "https://f/1"}, {"feed_url": "https://f/2"}]
+        results = library.fetch_feeds(subs, 12)
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(r[1] is None and r[2] == "boom" for r in results))
+
+    def test_empty_subscriptions(self):
+        self.assertEqual(library.fetch_feeds([], 12), [])

@@ -50,6 +50,47 @@ def _page_base(request, *exclude):
     return f'{encoded}&' if encoded else ''
 
 
+def _subscription_filter_chips(subscriptions, active_filters, active_channels):
+    """Chips de filtro que se activan/desactivan sin JavaScript.
+
+    Cada chip enlaza a la URL con **ese** filtro alternado, así se pueden
+    combinar varias fuentes a la vez (la vista las trata como unión). El chip
+    «Todos» limpia la selección.
+    """
+    def encode(filters, channels):
+        pairs = [('filter', value) for value in sorted(filters)]
+        pairs += [('channel', value) for value in sorted(channels)]
+        return urlencode(pairs)
+
+    chips = [
+        {
+            'label': 'Todos',
+            'active': not active_filters and not active_channels,
+            'query': '',
+        },
+        {
+            'label': 'YouTube',
+            'active': 'youtube' in active_filters,
+            'query': encode(active_filters ^ {'youtube'}, active_channels),
+        },
+        {
+            'label': 'PeerTube',
+            'active': 'pep' in active_filters,
+            'query': encode(active_filters ^ {'pep'}, active_channels),
+        },
+    ]
+    for subscription in subscriptions:
+        feed_url = subscription.get('feed_url') or ''
+        if not feed_url:
+            continue
+        chips.append({
+            'label': subscription.get('title') or feed_url,
+            'active': feed_url in active_channels,
+            'query': encode(active_filters, active_channels ^ {feed_url}),
+        })
+    return chips
+
+
 def _extract_initial_data(html):
     """Parsea ``ytInitialData`` con un decodificador JSON real (robusto)."""
     marker = 'var ytInitialData = '
@@ -616,12 +657,12 @@ def subscriptions_view(request):
 
     subscriptions = library.get_subscriptions(request.session)
     entries = []
-    for subscription in subscriptions:
-        try:
-            feed = library.fetch_feed(subscription['feed_url'], limit=SUBSCRIPTION_FEED_LIMIT)
-        except (PlayerError, requests.RequestException) as exc:
+    for subscription, feed, error in library.fetch_feeds(
+        subscriptions, SUBSCRIPTION_FEED_LIMIT
+    ):
+        if error:
             errors.append(
-                f"{subscription.get('title') or subscription['feed_url']}: {exc}"
+                f"{subscription.get('title') or subscription.get('feed_url')}: {error}"
             )
             continue
         source_type = 'youtube' if 'youtube' in (subscription.get('source') or '').lower() else 'peer'
@@ -638,17 +679,30 @@ def subscriptions_view(request):
     # Orden cronológico (lo más reciente primero).
     entries.sort(key=library.published_sort_key, reverse=True)
 
-    filter_type = (request.GET.get('filter') or 'all').lower()
-    channel = request.GET.get('channel') or ''
-    visible = entries
-    if filter_type == 'youtube':
-        visible = [entry for entry in entries if entry['source_type'] == 'youtube']
-    elif filter_type in ('pep', 'peertube', 'sepia'):
-        visible = [entry for entry in entries if entry['source_type'] == 'peer']
+    # Filtros multi-selección (sin JS): varias fuentes se combinan como unión.
+    active_filters = {
+        value.lower() for value in request.GET.getlist('filter')
+    } & {'youtube', 'pep'}
+    active_channels = {value for value in request.GET.getlist('channel') if value}
+
+    platforms = set()
+    if 'youtube' in active_filters:
+        platforms.add('youtube')
+    if 'pep' in active_filters:
+        platforms.add('peer')
+
+    if not platforms and not active_channels:
+        visible = entries
     else:
-        filter_type = 'all'
-    if channel:
-        visible = [entry for entry in visible if entry['feed_url'] == channel]
+        visible = [
+            entry for entry in entries
+            if entry['source_type'] in platforms
+            or entry['feed_url'] in active_channels
+        ]
+
+    filter_chips = _subscription_filter_chips(
+        subscriptions, active_filters, active_channels
+    )
 
     playlist_data = {
         'title': 'Suscripciones',
@@ -668,8 +722,7 @@ def subscriptions_view(request):
         'page_obj': page_obj,
         'total_entries': len(entries),
         'visible_count': len(visible),
-        'filter': filter_type,
-        'channel': channel,
+        'filter_chips': filter_chips,
         'playlist_data': playlist_data,
         'errors': errors,
         'favorite_links': library.favorite_links(request.session),
