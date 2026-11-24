@@ -602,13 +602,37 @@ def _redirect_back(request, default):
 @require_http_methods(['GET', 'POST'])
 def favorites_view(request):
     """Lista los favoritos de la sesión y procesa añadir/quitar."""
+    errors = []
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'add':
             library.add_favorite(request.session, request.POST)
+            return _redirect_back(request, 'search:favorites')
+        if action == 'add_url':
+            raw = (request.POST.get('url') or '').strip()
+            if not raw:
+                errors.append('Pega la URL de un vídeo.')
+            else:
+                try:
+                    validate_source_url(raw)
+                except PlayerError as exc:
+                    errors.append(str(exc))
+                else:
+                    try:
+                        item = library.extract_video(raw)
+                    except (PlayerError, requests.RequestException):
+                        # Aunque no se puedan leer los metadatos, se guarda la URL.
+                        item = {
+                            'title': raw,
+                            'link': raw,
+                            'source': 'Vídeo',
+                            'color': '#586e75',
+                        }
+                    library.add_favorite(request.session, item)
+                    return _redirect_back(request, 'search:favorites')
         elif action == 'remove':
             library.remove_favorite(request.session, request.POST.get('link', ''))
-        return _redirect_back(request, 'search:favorites')
+            return _redirect_back(request, 'search:favorites')
 
     favorites = library.get_favorites(request.session)
     page_obj = Paginator(favorites, RESULTS_PER_PAGE).get_page(
@@ -616,6 +640,7 @@ def favorites_view(request):
     )
     return render(request, 'search/favorites.html', {
         'page_obj': page_obj,
+        'errors': errors,
         'favorite_links': library.favorite_links(request.session),
         'playlist_links': library.playlist_links(request.session),
         'subscription_keys': library.subscription_keys(request.session),
@@ -650,6 +675,11 @@ def subscriptions_view(request):
         elif action == 'remove':
             library.remove_subscription(
                 request.session, request.POST.get('feed_url', '')
+            )
+            return _redirect_back(request, 'search:subscriptions')
+        elif action == 'remove_key':
+            library.remove_subscription_by_key(
+                request.session, request.POST.get('channel_key', '')
             )
             return _redirect_back(request, 'search:subscriptions')
         if not errors:

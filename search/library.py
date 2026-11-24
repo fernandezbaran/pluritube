@@ -111,6 +111,20 @@ def remove_subscription(session, feed_url):
     ]
 
 
+def remove_subscription_by_key(session, channel_key):
+    """Quita la suscripción cuyo ``channel_key`` coincida.
+
+    Las tarjetas de resultados conocen el canal por su ``channel_key`` (no por
+    el ``feed_url``), así que necesitan esta vía para desuscribirse.
+    """
+    if not channel_key:
+        return
+    session[SUBSCRIPTIONS_KEY] = [
+        sub for sub in get_subscriptions(session)
+        if sub.get("channel_key") != channel_key
+    ]
+
+
 def subscription_keys(session):
     """Claves de canal suscritas (para marcar «Suscrito» en las tarjetas)."""
     return {sub.get("channel_key") for sub in get_subscriptions(session) if sub.get("channel_key")}
@@ -311,6 +325,65 @@ def extract_playlist(url):
         )
 
     return {"title": info.get("title") or "Playlist", "entries": entries}
+
+
+def extract_video(url):
+    """Metadatos de un vídeo suelto (título, miniatura, origen) para guardarlo.
+
+    A diferencia de ``extract_playlist`` no lista una playlist: resuelve el
+    primer vídeo de la URL. Se usa al añadir un favorito pegando su URL.
+    """
+    command = [
+        ytdlp_bin(),
+        "-J",
+        "--no-warnings",
+        "--no-playlist",
+        "--skip-download",
+        "--socket-timeout", "20",
+        "--", url,
+    ]
+    try:
+        proc = subprocess.run(
+            command, capture_output=True, text=True, timeout=PLAYLIST_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PlayerError("Se agotó el tiempo al leer el vídeo.") from exc
+    except OSError as exc:
+        raise PlayerError(f"No se pudo ejecutar yt-dlp: {exc}") from exc
+
+    if proc.returncode != 0:
+        lines = (proc.stderr or "").strip().splitlines()
+        raise PlayerError(_friendly_playlist_error(lines[-1] if lines else ""))
+
+    try:
+        info = json.loads(proc.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise PlayerError("Respuesta inválida de yt-dlp.") from exc
+    if not isinstance(info, dict):
+        raise PlayerError("Respuesta inesperada de yt-dlp.")
+    if info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        if not entries:
+            raise PlayerError("La URL no contiene ningún vídeo.")
+        info = entries[0]
+
+    thumbs = info.get("thumbnails") or []
+    thumbnail = info.get("thumbnail") or (thumbs[-1].get("url") if thumbs else "")
+    extractor = info.get("extractor_key") or info.get("extractor") or "Vídeo"
+    low = extractor.lower()
+    if "youtube" in low:
+        source, color = "YouTube", "#ff0000"
+    elif "peertube" in low:
+        source, color = "PeerTube", "#859900"
+    else:
+        source, color = extractor, "#586e75"
+    return {
+        "title": info.get("title") or "Vídeo",
+        "link": info.get("webpage_url") or url,
+        "thumbnail": thumbnail,
+        "source": source,
+        "color": color,
+    }
 
 
 # --------------------------------------------------------------------------- #

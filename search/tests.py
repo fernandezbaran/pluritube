@@ -4,6 +4,7 @@ Cubren los ayudantes puros de ``search.library`` que arreglan las playlists
 Mix y los mensajes de error, además de los ayudantes de sesión.
 """
 
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -710,6 +711,138 @@ class SubscriptionFilterTests(TestCase):
         _response, context = self._visible_titles()
         chips = {chip["label"]: chip for chip in context["filter_chips"]}
         self.assertEqual(chips["Todos"]["query"], "")
+
+
+class FavoriteUrlTests(TestCase):
+    """Alta de favoritos pegando la URL de un vídeo."""
+
+    @patch.object(views, "validate_source_url", lambda url: url)
+    @patch.object(views.library, "extract_video")
+    def test_add_url_stores_resolved_metadata(self, extract_video):
+        extract_video.return_value = {
+            "title": "Vídeo",
+            "link": "https://videos.test/1",
+            "thumbnail": "",
+            "source": "YouTube",
+            "color": "#ff0000",
+        }
+        response = self.client.post(
+            reverse("search:favorites"),
+            {"action": "add_url", "url": "https://videos.test/1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        favorites = self.client.session["favorites"]
+        self.assertEqual(len(favorites), 1)
+        self.assertEqual(favorites[0]["link"], "https://videos.test/1")
+        self.assertEqual(favorites[0]["title"], "Vídeo")
+
+    @patch.object(views, "validate_source_url", lambda url: url)
+    @patch.object(views.library, "extract_video", side_effect=PlayerError("boom"))
+    def test_add_url_falls_back_to_raw_link(self, extract_video):
+        response = self.client.post(
+            reverse("search:favorites"),
+            {"action": "add_url", "url": "https://videos.test/2"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.client.session["favorites"][0]["link"], "https://videos.test/2"
+        )
+
+    def test_invalid_url_is_rejected(self):
+        response = self.client.post(
+            reverse("search:favorites"),
+            {"action": "add_url", "url": "no-es-una-url"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session.get("favorites", []), [])
+
+
+class ExtractVideoTests(SimpleTestCase):
+    """Metadatos de un vídeo suelto leídos con yt-dlp."""
+
+    def _run(self, info):
+        proc = SimpleNamespace(
+            returncode=0, stdout=json.dumps(info), stderr=""
+        )
+        with patch.object(library.subprocess, "run", return_value=proc):
+            return library.extract_video("https://videos.test/watch")
+
+    def test_youtube_metadata(self):
+        item = self._run({
+            "title": "Vídeo",
+            "webpage_url": "https://www.youtube.com/watch?v=abc",
+            "thumbnail": "https://i.ytimg.com/x.jpg",
+            "extractor_key": "Youtube",
+        })
+        self.assertEqual(item["title"], "Vídeo")
+        self.assertEqual(item["link"], "https://www.youtube.com/watch?v=abc")
+        self.assertEqual(item["source"], "YouTube")
+        self.assertEqual(item["color"], "#ff0000")
+
+    def test_peertube_uses_thumbnail_list(self):
+        item = self._run({
+            "title": "PT",
+            "extractor_key": "PeerTube",
+            "thumbnails": [{"url": "https://pt.test/a.jpg"}],
+        })
+        self.assertEqual(item["source"], "PeerTube")
+        self.assertEqual(item["thumbnail"], "https://pt.test/a.jpg")
+
+    def test_playlist_is_reduced_to_first_entry(self):
+        item = self._run({
+            "_type": "playlist",
+            "entries": [
+                {
+                    "title": "Uno",
+                    "webpage_url": "https://videos.test/1",
+                    "extractor_key": "Youtube",
+                }
+            ],
+        })
+        self.assertEqual(item["title"], "Uno")
+        self.assertEqual(item["link"], "https://videos.test/1")
+
+    def test_failure_raises_player_error(self):
+        proc = SimpleNamespace(returncode=1, stdout="", stderr="ERROR: boom")
+        with patch.object(library.subprocess, "run", return_value=proc):
+            with self.assertRaises(PlayerError):
+                library.extract_video("https://videos.test/watch")
+
+
+class SubscriptionToggleTests(TestCase):
+    """Desuscribirse desde la tarjeta usando el ``channel_key``."""
+
+    def _subscribe(self):
+        session = self.client.session
+        session["subscriptions"] = [
+            {"feed_url": "https://feeds.test/a.xml", "channel_key": "yt:UC1", "title": "A"},
+            {"feed_url": "https://feeds.test/b.xml", "channel_key": "yt:UC2", "title": "B"},
+        ]
+        session.save()
+
+    def test_remove_by_key_removes_only_that_channel(self):
+        self._subscribe()
+        session = self.client.session
+        library.remove_subscription_by_key(session, "yt:UC1")
+        session.save()
+        remaining = library.get_subscriptions(session)
+        self.assertEqual([sub["channel_key"] for sub in remaining], ["yt:UC2"])
+
+    def test_empty_key_is_a_noop(self):
+        self._subscribe()
+        session = self.client.session
+        library.remove_subscription_by_key(session, "")
+        self.assertEqual(len(library.get_subscriptions(session)), 2)
+
+    def test_view_remove_key_redirects(self):
+        self._subscribe()
+        response = self.client.post(
+            reverse("search:subscriptions"),
+            {"action": "remove_key", "channel_key": "yt:UC1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        remaining = self.client.session["subscriptions"]
+        self.assertEqual([sub["channel_key"] for sub in remaining], ["yt:UC2"])
 
 
 class _FeedResponse:
