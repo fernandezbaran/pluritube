@@ -115,7 +115,7 @@ python manage.py runserver
    - **Suscribirte / desuscribirte** del canal (el mismo botón alterna).
    - Si es una playlist: **Reproducir playlist**, **Abrir URL**, **Ver lista** o **Guardar / quitar** la playlist.
 3. En **Suscripciones** verás los vídeos de tus canales en orden cronológico. Filtra por plataforma o canal y pulsa **Reproducir todo como playlist**.
-4. En **Playlist** puedes abrir una playlist por URL, ver su lista y guardarla. En **Favoritos** puedes añadir un vídeo pegando su URL.
+4. En **Playlist** puedes añadir una playlist pegando su URL (queda guardada en la lista) y ver sus vídeos con **Ver lista**. En **Favoritos** puedes añadir un vídeo pegando su URL.
 5. En **Exportar** descargas tu configuración; en **Importar** la vuelves a cargar (subiendo el fichero o pegando el JSON).
 
 ### Reproductor
@@ -134,7 +134,7 @@ Todas están definidas en `search/urls.py` (namespace `search`) y montadas en la
 | `/` | GET | Búsqueda y listado paginado (`?q=`, `?page=`) |
 | `/favorites/` | GET/POST | Favoritos paginados (`?page=`, `action=add\|add_url\|remove`) |
 | `/subscriptions/` | GET/POST | Suscripciones, listado cronológico paginado (`?page=`), filtros multi-selección (`?filter=youtube\|pep`, repetible; `?channel=`, repetible) |
-| `/playlist/` | GET | Abrir/ver una playlist (`?url=`) y playlists guardadas; entradas paginadas (`?page=`) y guardadas (`?spage=`) |
+| `/playlist/` | GET/POST | Añadir una playlist por URL (`action=add_url`) y ver una lista (`?url=`); guardadas paginadas (`?spage=`) y entradas (`?page=`) |
 | `/playlists/save/` | POST | Guardar/quitar playlist guardada |
 | `/export/` | GET | Descargar `video-searcher-config.json` |
 | `/import/` | GET/POST | Importar configuración (fichero o JSON pegado) |
@@ -225,7 +225,7 @@ source venv/bin/activate
 python manage.py test
 ```
 
-Actualmente: **81 tests OK**. Verificación adicional de configuración:
+Actualmente: **84 tests OK**. Verificación adicional de configuración:
 
 ```bash
 python manage.py check
