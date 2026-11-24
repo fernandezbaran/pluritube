@@ -32,7 +32,7 @@ PluriTube agrega en una sola página los resultados de búsqueda de **YouTube** 
 - Busca en **YouTube** (scrapeando `ytInitialData`) y en **SepiaSearch** (API de PeerTube) y mezcla los resultados en una única página paginada.
 - Reconoce vídeos y **playlists** de YouTube.
 - Muestra el **nombre del canal** en cada tarjeta y permite **suscribirse** a ese canal con un clic.
-- Página de **suscripciones** que junta los vídeos de todos los canales seguidos en **orden cronológico**, con filtros por todos / YouTube / PeerTube / canal concreto y un botón para **reproducir todos como playlist**.
+- Página de **suscripciones** que junta los vídeos de todos los canales seguidos en **orden cronológico**, con paneles plegables para gestionar los canales seguidos y para los filtros **multi-selección** (Todos / YouTube / PeerTube / canal) que se pueden combinar —sin JavaScript— y un botón para **reproducir todos como playlist**.
 - **Reproductor propio** (overlay) con cola, navegación anterior/siguiente, **desplegable con toda la lista** para saltar a cualquier vídeo y controles **Auto / Bucle / Aleatorio**.
 - **Favoritos**, **playlists guardadas** y **suscripciones** guardados en la sesión del servidor.
 - **Exportación e importación** de toda la configuración en un único JSON.
@@ -43,6 +43,7 @@ PluriTube agrega en una sola página los resultados de búsqueda de **YouTube** 
 - **Privacidad**: el navegador nunca contacta directamente con YouTube/PeerTube para el vídeo; todo pasa por el backend mediante enlaces firmados (`django.core.signing`).
 - **Reproducción de HLS**: las instancias PeerTube que solo ofrecen HLS se reproducen con [hls.js](https://github.com/video-dev/hls.js) vendorizado y un proxy `m3u8`/segmentos propio.
 - **Miniaturas proxy**: se sirven a través de `/api/thumb/` con caché en disco, útil si tu red bloquea los CDN de imágenes.
+- **Feeds de suscripciones con caché**: los RSS/Atom se cachean en el servidor (10 min por defecto) y se revalidan con peticiones condicionales, además de descargarse **en paralelo**. Con muchos canales, la página de suscripciones pasa de tardar segundos a ser casi instantánea (detalles en [`docs/carga-de-feeds.md`](docs/carga-de-feeds.md)).
 - **Proxy de vídeo con `Range`** y reintentos automáticos ante `401/403/410`.
 
 ## Stack
@@ -132,7 +133,7 @@ Todas están definidas en `search/urls.py` (namespace `search`) y montadas en la
 | --- | --- | --- |
 | `/` | GET | Búsqueda y listado paginado (`?q=`, `?page=`) |
 | `/favorites/` | GET/POST | Favoritos paginados (`?page=`, `action=add\|remove`) |
-| `/subscriptions/` | GET/POST | Suscripciones, listado cronológico paginado (`?page=`), filtros (`?filter=all\|youtube\|pep`, `?channel=`) |
+| `/subscriptions/` | GET/POST | Suscripciones, listado cronológico paginado (`?page=`), filtros multi-selección (`?filter=youtube\|pep`, repetible; `?channel=`, repetible) |
 | `/playlist/` | GET | Abrir/ver una playlist (`?url=`) y playlists guardadas; entradas paginadas (`?page=`) y guardadas (`?spage=`) |
 | `/playlists/save/` | POST | Guardar/quitar playlist guardada |
 | `/export/` | GET | Descargar `video-searcher-config.json` |
@@ -155,6 +156,11 @@ Variables de entorno opcionales:
 | `THUMB_CACHE_DIR` | `$TMPDIR/video_searcher_thumbs` | Directorio de caché de miniaturas |
 | `THUMB_CACHE_TTL` | `259200` (3 días) | Vida de la caché de miniaturas, en segundos |
 | `THUMB_CACHE_MAX_FILES` | `1000` | Nº máximo de miniaturas en caché (poda las más antiguas) |
+
+| `FEED_CACHE_TTL` | `600` (10 min) | Ventana de frescura de los feeds; dentro de ella no se consulta el origen. `0` desactiva el caché |
+| `FEED_CACHE_RETENTION` | `86400` (24 h) | Retención máxima de una entrada de caché (permite revalidar y servir «viejo si error») |
+| `FEED_TIMEOUT` | `8` (s) | Timeout de cada petición HTTP de feed/canal |
+| `FEED_CONCURRENCY` | `6` | Número de feeds descargados en paralelo |
 
 > Ajustes de desarrollo: `DEBUG=True` y `ALLOWED_HOSTS=['*']`. **No es una configuración lista para producción**: para desplegar, define `DEBUG=False`, un `SECRET_KEY` propio, `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS`. El middleware `DevAnyOriginCsrfMiddleware` solo actúa con `DEBUG=True`.
 
@@ -205,6 +211,7 @@ video_searcher/
 ├── requirements.txt
 ├── manage.py
 ├── AGENTS.md                  # Notas técnicas para agentes/desarrolladores
+├── docs/                      # Notas de diseño y decisiones (ver docs/README.md)
 ├── .gitignore
 └── README.md
 ```
@@ -218,7 +225,7 @@ source venv/bin/activate
 python manage.py test
 ```
 
-Actualmente: **56 tests OK**. Verificación adicional de configuración:
+Actualmente: **71 tests OK**. Verificación adicional de configuración:
 
 ```bash
 python manage.py check
@@ -231,7 +238,7 @@ python manage.py check
 - La **detección de playlists** depende de la búsqueda: no todas las consultas devuelven playlists.
 - **PeerTube solo-HLS**: algunas instancias entregan un `-fragmented.mp4` que el navegador no reproduce como MP4 progresivo; por eso se usa hls.js y el proxy `/api/hls/`.
 - **Sin FFmpeg**: no se mezclan pistas de audio/vídeo separadas ni se soporta DASH.
-- La página de suscripciones consulta todos los feeds en cada visita (hasta 12 vídeos por feed); con muchos canales puede tardar.
+- La página de suscripciones descarga los feeds de tus canales. Se **cachean en el servidor** (10 min por defecto) y se piden **en paralelo**, así que con muchos canales la primera carga puede tardar unos segundos pero las siguientes son casi instantáneas. Si el origen de un feed falla, se muestra lo último cacheado.
 - Los enlaces **Código fuente** y **Licencia de uso** del sitio son marcadores pendientes de definir.
 
 ## Créditos
