@@ -130,10 +130,10 @@ Todas están definidas en `search/urls.py` (namespace `search`) y montadas en la
 
 | Ruta | Método | Descripción |
 | --- | --- | --- |
-| `/` | GET | Búsqueda y listado paginado (`?q=`) |
-| `/favorites/` | GET/POST | Favoritos (`action=add\|remove`) |
-| `/subscriptions/` | GET/POST | Suscripciones, listado cronológico, filtros (`?filter=all\|youtube\|pep`, `?channel=`) |
-| `/playlist/` | GET | Abrir/ver una playlist (`?url=`) y playlists guardadas |
+| `/` | GET | Búsqueda y listado paginado (`?q=`, `?page=`) |
+| `/favorites/` | GET/POST | Favoritos paginados (`?page=`, `action=add\|remove`) |
+| `/subscriptions/` | GET/POST | Suscripciones, listado cronológico paginado (`?page=`), filtros (`?filter=all\|youtube\|pep`, `?channel=`) |
+| `/playlist/` | GET | Abrir/ver una playlist (`?url=`) y playlists guardadas; entradas paginadas (`?page=`) y guardadas (`?spage=`) |
 | `/playlists/save/` | POST | Guardar/quitar playlist guardada |
 | `/export/` | GET | Descargar `video-searcher-config.json` |
 | `/import/` | GET/POST | Importar configuración (fichero o JSON pegado) |
@@ -218,7 +218,7 @@ source venv/bin/activate
 python manage.py test
 ```
 
-Actualmente: **48 tests OK**. Verificación adicional de configuración:
+Actualmente: **56 tests OK**. Verificación adicional de configuración:
 
 ```bash
 python manage.py check
