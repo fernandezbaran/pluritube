@@ -83,6 +83,17 @@ DATABASES = {
 }
 
 
+# Caché (incluye el caché de feeds de las suscripciones).
+# LocMem basta para un único proceso; si sirves con varios workers, cambia el
+# BACKEND por uno compartido (p. ej. FileBasedCache con un LOCATION en disco).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'video-searcher',
+    }
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
