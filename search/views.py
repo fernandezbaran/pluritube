@@ -818,20 +818,43 @@ def _playlist_payload(playlist):
     }
 
 
-@require_GET
+@require_http_methods(['GET', 'POST'])
 def playlist_view(request):
-    """Carga una playlist/URL con yt-dlp y lista sus vídeos."""
+    """Gestiona las playlists guardadas y lista una playlist/URL con yt-dlp."""
+    errors = []
+    if request.method == 'POST':
+        if request.POST.get('action') == 'add_url':
+            raw = (request.POST.get('url') or '').strip()
+            if not raw:
+                errors.append('Pega la URL de una playlist.')
+            else:
+                try:
+                    validate_source_url(raw)
+                except PlayerError as exc:
+                    errors.append(str(exc))
+                else:
+                    try:
+                        resolved = library.extract_playlist(raw)
+                    except (PlayerError, requests.RequestException):
+                        resolved = None
+                    library.add_playlist(request.session, {
+                        'title': (resolved or {}).get('title') or raw,
+                        'link': raw,
+                        'source': 'Playlist',
+                        'color': '#6c71c4',
+                    })
+                    return _redirect_back(request, 'search:playlist')
+
     url = request.GET.get('url', '').strip()
     playlist = None
-    error = None
     if url:
         try:
             validate_source_url(url)
             playlist = library.extract_playlist(url)
         except PlayerError as exc:
-            error = str(exc)
+            errors.append(str(exc))
         except Exception:
-            error = 'No se pudo leer la playlist.'
+            errors.append('No se pudo leer la playlist.')
 
     entries = playlist.get('entries') if playlist else []
     page_obj = Paginator(entries, RESULTS_PER_PAGE).get_page(
@@ -845,13 +868,12 @@ def playlist_view(request):
         'url': url,
         'playlist': playlist,
         'playlist_data': _playlist_payload(playlist) if playlist else None,
-        'error': error,
+        'errors': errors,
         'page_obj': page_obj,
         'page_base': _page_base(request, 'page'),
         'saved_page': saved_page,
         'saved_page_base': _page_base(request, 'spage'),
         'playlist_links': library.playlist_links(request.session),
-        'saved': bool(url) and url in library.playlist_links(request.session),
         'favorite_links': library.favorite_links(request.session),
         'subscription_keys': library.subscription_keys(request.session),
         'next': request.get_full_path(),

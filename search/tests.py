@@ -612,6 +612,50 @@ class PaginationViewTests(TestCase):
         response = self.client.get(reverse("search:playlist"), {"spage": 2})
         self.assertEqual(len(response.context["saved_page"]), 1)
         self.assertEqual(response.context["saved_page_base"], "")
+        # La paginación de playlists guardadas debe enlazar con ``spage=``,
+        # no con ``page=`` (que paginaría las entradas cargadas).
+        self.assertContains(response, "?spage=1")
+
+
+class PlaylistAddUrlTests(TestCase):
+    """Añadir una playlist guardada pegando su URL."""
+
+    @patch.object(views, "validate_source_url", lambda url: url)
+    @patch.object(views.library, "extract_playlist")
+    def test_add_url_saves_playlist(self, extract_playlist):
+        extract_playlist.return_value = {
+            "title": "Mi lista",
+            "entries": [{"link": "https://videos.test/1"}],
+        }
+        response = self.client.post(
+            reverse("search:playlist"),
+            {"action": "add_url", "url": "https://videos.test/pl"},
+        )
+        self.assertEqual(response.status_code, 302)
+        saved = self.client.session["playlists"]
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]["title"], "Mi lista")
+        self.assertEqual(saved[0]["link"], "https://videos.test/pl")
+
+    @patch.object(views, "validate_source_url", lambda url: url)
+    @patch.object(views.library, "extract_playlist", side_effect=PlayerError("boom"))
+    def test_add_url_falls_back_to_raw_url(self, extract_playlist):
+        response = self.client.post(
+            reverse("search:playlist"),
+            {"action": "add_url", "url": "https://videos.test/pl"},
+        )
+        self.assertEqual(response.status_code, 302)
+        saved = self.client.session["playlists"]
+        self.assertEqual(saved[0]["link"], "https://videos.test/pl")
+        self.assertEqual(saved[0]["title"], "https://videos.test/pl")
+
+    def test_invalid_url_is_rejected(self):
+        response = self.client.post(
+            reverse("search:playlist"),
+            {"action": "add_url", "url": "no-es-url"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session.get("playlists", []), [])
 
 
 class SubscriptionFilterTests(TestCase):
