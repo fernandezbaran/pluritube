@@ -31,6 +31,24 @@ YT_PLAYLIST_URL = "https://www.youtube.com/playlist?list={}"
 #: Cuántos vídeos se leen de cada feed de suscripción al construir la lista.
 SUBSCRIPTION_FEED_LIMIT = 12
 
+#: Elementos por página en los listados (búsqueda, favoritos, suscripciones…).
+RESULTS_PER_PAGE = 10
+
+
+def _page_base(request, *exclude):
+    """Query GET sin las claves indicadas, listo para anteponer a ``page=``.
+
+    La paginación debe conservar el contexto de la página (los filtros de
+    suscripciones, la URL de una playlist…), pero nunca arrastrar su propia
+    clave de página. Devuelve, por ejemplo, ``'filter=all&channel=x&'`` o
+    ``''`` si no queda ningún parámetro.
+    """
+    params = request.GET.copy()
+    for key in exclude or ('page',):
+        params.pop(key, None)
+    encoded = params.urlencode()
+    return f'{encoded}&' if encoded else ''
+
 
 def _extract_initial_data(html):
     """Parsea ``ytInitialData`` con un decodificador JSON real (robusto)."""
@@ -263,11 +281,12 @@ def search_view(request):
                 combined_results.append(sepia[j])
                 j += 1
 
-    paginator = Paginator(combined_results, 10) # 10 items per page (5 YT, 5 Sepia)
+    paginator = Paginator(combined_results, RESULTS_PER_PAGE) # 10 items per page (5 YT, 5 Sepia)
     page_obj = paginator.get_page(page_number)
         
     return render(request, 'search/index.html', {
         'page_obj': page_obj,
+        'page_base': _page_base(request),
         'query': query,
         'favorite_links': library.favorite_links(request.session),
         'playlist_links': library.playlist_links(request.session),
@@ -550,13 +569,18 @@ def favorites_view(request):
             library.remove_favorite(request.session, request.POST.get('link', ''))
         return _redirect_back(request, 'search:favorites')
 
+    favorites = library.get_favorites(request.session)
+    page_obj = Paginator(favorites, RESULTS_PER_PAGE).get_page(
+        request.GET.get('page', 1)
+    )
     return render(request, 'search/favorites.html', {
-        'favorites': library.get_favorites(request.session),
+        'page_obj': page_obj,
         'favorite_links': library.favorite_links(request.session),
         'playlist_links': library.playlist_links(request.session),
         'subscription_keys': library.subscription_keys(request.session),
         'remove_mode': True,
         'next': request.get_full_path(),
+        'page_base': _page_base(request),
     })
 
 
@@ -635,10 +659,15 @@ def subscriptions_view(request):
         ],
     }
 
+    page_obj = Paginator(visible, RESULTS_PER_PAGE).get_page(
+        request.GET.get('page', 1)
+    )
+
     return render(request, 'search/subscriptions.html', {
         'subscriptions': subscriptions,
-        'entries': visible,
+        'page_obj': page_obj,
         'total_entries': len(entries),
+        'visible_count': len(visible),
         'filter': filter_type,
         'channel': channel,
         'playlist_data': playlist_data,
@@ -647,6 +676,7 @@ def subscriptions_view(request):
         'playlist_links': library.playlist_links(request.session),
         'subscription_keys': library.subscription_keys(request.session),
         'next': request.get_full_path(),
+        'page_base': _page_base(request),
     })
 
 
@@ -720,12 +750,23 @@ def playlist_view(request):
         except Exception:
             error = 'No se pudo leer la playlist.'
 
+    entries = playlist.get('entries') if playlist else []
+    page_obj = Paginator(entries, RESULTS_PER_PAGE).get_page(
+        request.GET.get('page', 1)
+    )
+    saved_page = Paginator(
+        library.get_playlists(request.session), RESULTS_PER_PAGE
+    ).get_page(request.GET.get('spage', 1))
+
     return render(request, 'search/playlist.html', {
         'url': url,
         'playlist': playlist,
         'playlist_data': _playlist_payload(playlist) if playlist else None,
         'error': error,
-        'playlists': library.get_playlists(request.session),
+        'page_obj': page_obj,
+        'page_base': _page_base(request, 'page'),
+        'saved_page': saved_page,
+        'saved_page_base': _page_base(request, 'spage'),
         'playlist_links': library.playlist_links(request.session),
         'saved': bool(url) and url in library.playlist_links(request.session),
         'favorite_links': library.favorite_links(request.session),

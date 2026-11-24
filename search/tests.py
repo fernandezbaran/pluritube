@@ -7,11 +7,14 @@ Mix y los mensajes de error, además de los ayudantes de sesión.
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import requests
-from django.test import SimpleTestCase
+from django.http import QueryDict
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from . import library, player, thumbnails, views
 from .player import PlayerError, unsign_stream
@@ -485,3 +488,125 @@ class ExtractMediaKindTests(SimpleTestCase):
         )
         self.assertFalse(player._looks_like_fragmented_mp4("https://x/web-videos/a.mp4"))
         self.assertFalse(player._looks_like_fragmented_mp4(""))
+
+
+class PageBaseTests(SimpleTestCase):
+    def test_removes_page_and_keeps_filters(self):
+        request = SimpleNamespace(GET=QueryDict("filter=youtube&channel=x&page=3"))
+        self.assertEqual(views._page_base(request), "filter=youtube&channel=x&")
+
+    def test_empty_when_only_page(self):
+        request = SimpleNamespace(GET=QueryDict("page=2"))
+        self.assertEqual(views._page_base(request), "")
+
+    def test_excludes_several_keys(self):
+        request = SimpleNamespace(GET=QueryDict("url=u&page=2&spage=4"))
+        self.assertEqual(views._page_base(request, "page", "spage"), "url=u&")
+
+
+class PaginationViewTests(TestCase):
+    """Paginación sin JS de favoritos, suscripciones y playlists."""
+
+    def _set_session(self, key, value):
+        session = self.client.session
+        session[key] = value
+        session.save()
+
+    def _favorite(self, index):
+        return {
+            "title": f"Vídeo {index}",
+            "link": f"https://videos.test/{index}",
+            "thumbnail": "",
+            "source": "YouTube",
+            "color": "#ff0000",
+        }
+
+    def test_favorites_paginate(self):
+        total = views.RESULTS_PER_PAGE * 3 + 4
+        self._set_session("favorites", [self._favorite(i) for i in range(total)])
+        response = self.client.get(reverse("search:favorites"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["page_obj"]), views.RESULTS_PER_PAGE)
+        self.assertEqual(response.context["page_obj"].paginator.count, total)
+
+    def test_favorites_last_and_out_of_range_page(self):
+        self._set_session("favorites", [self._favorite(i) for i in range(12)])
+        page = self.client.get(reverse("search:favorites"), {"page": 2})
+        self.assertEqual(len(page.context["page_obj"]), 2)
+        # Fuera de rango: Django devuelve la última página.
+        last = self.client.get(reverse("search:favorites"), {"page": 99})
+        self.assertEqual(last.context["page_obj"].number, 2)
+
+    def _subscription(self):
+        return {
+            "feed_url": "https://feeds.test/a.xml",
+            "title": "Canal",
+            "source": "YouTube",
+            "channel_url": "https://www.youtube.com/channel/UCx",
+            "channel_key": "yt:UCx",
+        }
+
+    def _feed_entry(self, index):
+        return {
+            "title": f"Feed {index}",
+            "link": f"https://feeds.test/watch/{index}",
+            "thumbnail": "",
+            "description": "",
+            "source": "Canal",
+            "color": "#ff0000",
+            "published": "2026-01-01T00:00:00+00:00",
+        }
+
+    @patch.object(views.library, "fetch_feed")
+    def test_subscriptions_paginate_and_keep_filter(self, fetch_feed):
+        total = views.RESULTS_PER_PAGE * 2 + 3
+        fetch_feed.return_value = {
+            "title": "Canal",
+            "entries": [self._feed_entry(i) for i in range(total)],
+        }
+        self._set_session("subscriptions", [self._subscription()])
+        response = self.client.get(
+            reverse("search:subscriptions"), {"page": 3, "filter": "youtube"}
+        )
+        self.assertEqual(len(response.context["page_obj"]), 3)
+        self.assertEqual(response.context["visible_count"], total)
+        self.assertEqual(response.context["page_base"], "filter=youtube&")
+        # "Reproducir todo" conserva la lista filtrada completa.
+        self.assertEqual(len(response.context["playlist_data"]["entries"]), total)
+
+    @patch.object(views.library, "extract_playlist")
+    def test_playlist_entries_paginate(self, extract_playlist):
+        total = views.RESULTS_PER_PAGE + 5
+        extract_playlist.return_value = {
+            "title": "Lista",
+            "entries": [
+                {
+                    "title": f"Entrada {i}",
+                    "link": f"https://videos.test/{i}",
+                    "thumbnail": "",
+                    "description": "",
+                    "source": "Playlist",
+                    "color": "#6c71c4",
+                }
+                for i in range(total)
+            ],
+        }
+        with patch.object(views, "validate_source_url", lambda url: url):
+            response = self.client.get(
+                reverse("search:playlist"),
+                {"url": "https://videos.test/pl", "page": 2},
+            )
+        self.assertEqual(len(response.context["page_obj"]), 5)
+        self.assertEqual(response.context["page_obj"].number, 2)
+
+    def test_saved_playlists_paginate_with_spage(self):
+        self._set_session(
+            "playlists",
+            [
+                {"title": f"Lista {i}", "link": f"https://videos.test/pl/{i}"}
+                for i in range(views.RESULTS_PER_PAGE + 1)
+            ],
+        )
+        response = self.client.get(reverse("search:playlist"), {"spage": 2})
+        self.assertEqual(len(response.context["saved_page"]), 1)
+        self.assertEqual(response.context["saved_page_base"], "")
