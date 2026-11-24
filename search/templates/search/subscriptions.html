@@ -39,7 +39,7 @@
 <p class="empty">Aún no sigues ningún canal.</p>
 {% endfor %}
 
-<h2 class="section-title">Vídeos ({{ entries|length }} de {{ total_entries }})</h2>
+<h2 class="section-title">Vídeos ({{ visible_count }} de {{ total_entries }})</h2>
 
 {% if subscriptions %}
 <div class="filter-bar">
@@ -59,12 +59,13 @@
 {{ playlist_data|json_script:"playlist-data" }}
 {% endif %}
 
-{% if entries %}
+{% if page_obj %}
 <div class="results-grid">
-    {% for item in entries %}
+    {% for item in page_obj %}
         {% include "search/_card.html" with item=item next=request.get_full_path %}
     {% endfor %}
 </div>
+{% include "search/_pagination.html" with page_obj=page_obj page_base=page_base %}
 {% else %}
 <p class="empty">No hay vídeos que mostrar con este filtro.</p>
 {% endif %}

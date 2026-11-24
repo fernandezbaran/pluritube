@@ -19,7 +19,7 @@
 {% endif %}
 
 <h2 class="section-title">Tus playlists</h2>
-{% for saved in playlists %}
+{% for saved in saved_page %}
 <div class="sub-row">
     <span>{{ saved.title }}</span>
     <div class="row-actions">
@@ -38,6 +38,7 @@
 {% empty %}
 <p class="empty">Aún no has guardado playlists. Búscalas y pulsa «Guardar playlist».</p>
 {% endfor %}
+{% include "search/_pagination.html" with page_obj=saved_page page_base=saved_page_base %}
 
 {% if playlist %}
 <h2 class="section-title">{{ playlist.title }} ({{ playlist.entries|length }})</h2>
@@ -62,10 +63,11 @@
 
 {% if playlist.entries %}
 <div class="results-grid">
-    {% for item in playlist.entries %}
+    {% for item in page_obj %}
         {% include "search/_card.html" with item=item next=request.get_full_path %}
     {% endfor %}
 </div>
+{% include "search/_pagination.html" with page_obj=page_obj page_base=page_base %}
 {% else %}
 <p class="empty">La playlist no contiene vídeos reproducibles.</p>
 {% endif %}
