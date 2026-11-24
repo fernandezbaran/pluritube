@@ -23,33 +23,36 @@
 </ul>
 {% endif %}
 
-<h2 class="section-title">Tus suscripciones</h2>
-{% for sub in subscriptions %}
-<div class="sub-row">
-    <span>{{ sub.title }} <small>({{ sub.source }})</small></span>
-    <form method="post" class="inline-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="remove">
-        <input type="hidden" name="feed_url" value="{{ sub.feed_url }}">
-        <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit">Quitar</button>
-    </form>
-</div>
-{% empty %}
-<p class="empty">Aún no sigues ningún canal.</p>
-{% endfor %}
+<details class="subs-panel">
+    <summary>Tus suscripciones ({{ subscriptions|length }})</summary>
+    {% for sub in subscriptions %}
+    <div class="sub-row">
+        <span>{{ sub.title }} <small>({{ sub.source }})</small></span>
+        <form method="post" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="feed_url" value="{{ sub.feed_url }}">
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit">Quitar</button>
+        </form>
+    </div>
+    {% empty %}
+    <p class="empty">Aún no sigues ningún canal.</p>
+    {% endfor %}
+</details>
 
 <h2 class="section-title">Vídeos ({{ visible_count }} de {{ total_entries }})</h2>
 
 {% if subscriptions %}
-<div class="filter-bar">
-    <a class="{% if filter == 'all' and not channel %}active{% endif %}" href="?filter=all">Todos</a>
-    <a class="{% if filter == 'youtube' and not channel %}active{% endif %}" href="?filter=youtube">YouTube</a>
-    <a class="{% if filter == 'pep' and not channel %}active{% endif %}" href="?filter=pep">PeerTube</a>
-    {% for sub in subscriptions %}
-    <a class="{% if channel == sub.feed_url %}active{% endif %}" href="?filter={{ filter }}&amp;channel={{ sub.feed_url|urlencode }}">{{ sub.title }}</a>
-    {% endfor %}
-</div>
+<details class="subs-panel">
+    <summary>Filtros</summary>
+    <div class="filter-bar">
+        {% for chip in filter_chips %}
+        <a class="{% if chip.active %}active{% endif %}" href="?{{ chip.query }}">{{ chip.label }}</a>
+        {% endfor %}
+    </div>
+    <p class="filter-hint">Puedes combinar varias fuentes: vuelve a pulsar una para quitarla. «Todos» limpia la selección.</p>
+</details>
 {% endif %}
 
 {% if playlist_data.entries %}
