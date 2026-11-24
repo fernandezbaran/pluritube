@@ -13,7 +13,13 @@
             <span class="channel-link">{{ item.channel }}</span>
             {% endif %}
             {% if item.channel_key and item.channel_key in subscription_keys %}
-            <button type="button" class="fav-btn fav-on" disabled>&#10003; Suscrito</button>
+            <form method="post" action="{% url 'search:subscriptions' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove_key">
+                <input type="hidden" name="channel_key" value="{{ item.channel_key }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn fav-on" title="Pulsa para desuscribirte">&#10003; Suscrito</button>
+            </form>
             {% elif item.channel_link %}
             <form method="post" action="{% url 'search:subscriptions' %}" class="inline-form">
                 {% csrf_token %}
@@ -33,7 +39,13 @@
             <a class="btn-link" href="{{ item.link }}" target="_blank" rel="noopener noreferrer">Abrir URL</a>
             <a class="btn-link" href="{% url 'search:playlist' %}?url={{ item.link|urlencode }}">Ver lista</a>
             {% if item.link in playlist_links %}
-            <button type="button" class="fav-btn fav-on" disabled>&#10003; Playlist guardada</button>
+            <form method="post" action="{% url 'search:save_playlist' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="link" value="{{ item.link }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn fav-on" title="Pulsa para quitarla">&#10003; Playlist guardada</button>
+            </form>
             {% else %}
             <form method="post" action="{% url 'search:save_playlist' %}" class="inline-form">
                 {% csrf_token %}
@@ -59,7 +71,13 @@
                 <button type="submit" class="fav-btn">&#10005; Quitar</button>
             </form>
             {% elif item.link in favorite_links %}
-            <button type="button" class="fav-btn fav-on" disabled>&#9733; Guardado</button>
+            <form method="post" action="{% url 'search:favorites' %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="link" value="{{ item.link }}">
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit" class="fav-btn fav-on" title="Pulsa para quitarlo">&#9733; Guardado</button>
+            </form>
             {% else %}
             <form method="post" action="{% url 'search:favorites' %}" class="inline-form">
                 {% csrf_token %}

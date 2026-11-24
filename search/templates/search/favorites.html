@@ -8,6 +8,22 @@
     <p>Guardados en tu sesión. Se conservan mientras dure la cookie de sesión.</p>
 </div>
 
+<form method="post" class="lib-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add_url">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="text" name="url"
+           placeholder="https://www.youtube.com/watch?v=... o URL de vídeo"
+           required>
+    <button type="submit">&#43; Añadir a favoritos</button>
+</form>
+
+{% if errors %}
+<ul class="errors">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+</ul>
+{% endif %}
+
 {% if page_obj %}
 <div class="results-grid">
     {% for item in page_obj %}
