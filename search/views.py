@@ -635,11 +635,20 @@ def favorites_view(request):
             return _redirect_back(request, 'search:favorites')
 
     favorites = library.get_favorites(request.session)
+    playlist_data = {
+        'title': 'Favoritos',
+        'entries': [
+            {'title': favorite.get('title') or 'Vídeo', 'link': favorite['link']}
+            for favorite in favorites
+            if favorite.get('link')
+        ],
+    }
     page_obj = Paginator(favorites, RESULTS_PER_PAGE).get_page(
         request.GET.get('page', 1)
     )
     return render(request, 'search/favorites.html', {
         'page_obj': page_obj,
+        'playlist_data': playlist_data,
         'errors': errors,
         'favorite_links': library.favorite_links(request.session),
         'playlist_links': library.playlist_links(request.session),

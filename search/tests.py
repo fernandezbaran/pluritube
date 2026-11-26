@@ -801,6 +801,56 @@ class FavoriteUrlTests(TestCase):
         self.assertEqual(self.client.session.get("favorites", []), [])
 
 
+class FavoritesPlaylistTests(TestCase):
+    """Botón «Reproducir todo como playlist» de la página de favoritos."""
+
+    def _set_session(self, key, value):
+        session = self.client.session
+        session[key] = value
+        session.save()
+
+    def _favorite(self, index):
+        return {
+            "title": f"Vídeo {index}",
+            "link": f"https://videos.test/{index}",
+            "thumbnail": "",
+            "source": "YouTube",
+            "color": "#ff0000",
+        }
+
+    def test_playlist_data_contains_all_favorites(self):
+        total = views.RESULTS_PER_PAGE * 2 + 3
+        self._set_session("favorites", [self._favorite(i) for i in range(total)])
+        response = self.client.get(reverse("search:favorites"))
+        data = response.context["playlist_data"]
+        self.assertEqual(data["title"], "Favoritos")
+        self.assertEqual(len(data["entries"]), total)
+        self.assertEqual(data["entries"][0]["link"], "https://videos.test/0")
+
+    def test_playlist_data_skips_entries_without_link(self):
+        self._set_session(
+            "favorites",
+            [
+                {"title": "Sin enlace", "link": ""},
+                {"title": "Con enlace", "link": "https://videos.test/1"},
+            ],
+        )
+        response = self.client.get(reverse("search:favorites"))
+        entries = response.context["playlist_data"]["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["link"], "https://videos.test/1")
+
+    def test_button_and_json_script_render(self):
+        self._set_session("favorites", [self._favorite(0)])
+        response = self.client.get(reverse("search:favorites"))
+        self.assertContains(response, "Reproducir todo como playlist")
+        self.assertContains(response, 'id="playlist-data"')
+
+    def test_no_button_without_favorites(self):
+        response = self.client.get(reverse("search:favorites"))
+        self.assertNotContains(response, "Reproducir todo como playlist")
+
+
 class ExtractVideoTests(SimpleTestCase):
     """Metadatos de un vídeo suelto leídos con yt-dlp."""
 
