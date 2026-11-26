@@ -24,6 +24,13 @@
 </ul>
 {% endif %}
 
+{% if playlist_data.entries %}
+<div class="row-actions" style="margin-bottom: 16px;">
+    <button type="button" class="watch-btn playlist-play-btn" data-embedded="1" hidden>&#9654; Reproducir todo como playlist</button>
+</div>
+{{ playlist_data|json_script:"playlist-data" }}
+{% endif %}
+
 {% if page_obj %}
 <div class="results-grid">
     {% for item in page_obj %}
